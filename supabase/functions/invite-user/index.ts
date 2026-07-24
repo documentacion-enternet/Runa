@@ -1,8 +1,9 @@
 // supabase/functions/invite-user/index.ts
 //
-// Invita a un nuevo usuario del equipo por correo, con diseño propio de Runa.
-// Envía el correo vía SMTP de Gmail/Google Workspace.
-// Puede ser llamada por admin (cualquier rol) o lider (solo puede invitar agente/vista).
+// Invita a un nuevo usuario del equipo SAC por correo, con diseño propio de Runa.
+// Envía el correo vía SMTP de Gmail/Google Workspace, usando un alias (runa@enternet.cl)
+// configurado como "Enviar correo como" en una cuenta real del dominio.
+// Solo puede ser llamada por un admin (se verifica adentro).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { SMTPClient } from 'https://deno.land/x/denomailer/mod.ts';
@@ -12,18 +13,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Aplana el HTML a espacios simples y sin saltos de línea — evita bugs de "quoted-printable"
+// en algunos SMTP donde los saltos de línea largos dentro del cuerpo quedan mal decodificados.
 function minificarHtml(html: string): string {
   return html.replace(/\r?\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
-}
-
-function etiquetaRol(rol: string): string {
-  const etiquetas: Record<string, string> = {
-    admin: 'Administrador',
-    lider: 'Líder de Equipo',
-    agente: 'Agente SAC',
-    vista: 'Solo Vista',
-  };
-  return etiquetas[rol] ?? rol;
 }
 
 function plantillaInvitacion({ nombre, rolTexto, link }: { nombre: string; rolTexto: string; link: string }) {
@@ -37,14 +30,16 @@ function plantillaInvitacion({ nombre, rolTexto, link }: { nombre: string; rolTe
       <td align="center">
         <table role="presentation" width="100%" style="max-width:520px; background-color:#FFFFFF; border-radius:16px; overflow:hidden; box-shadow: 0 4px 24px rgba(122,107,176,0.12);">
 
+          <!-- Header con degradado morado en 3 tonos -->
           <tr>
             <td style="background: linear-gradient(135deg, #8C7EC7 0%, #7A6BB0 45%, #5B4E82 100%); padding: 36px 24px; text-align:center;">
               <div style="width:52px; height:52px; background-color:rgba(255,255,255,0.18); border-radius:14px; display:inline-block; line-height:52px; font-size:22px; font-weight:bold; color:#ffffff; margin-bottom:14px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);">R</div>
               <h1 style="margin:0; color:#ffffff; font-size:23px; font-weight:800;">¡Bienvenido a Runa!</h1>
-              <p style="margin:8px 0 0; color:rgba(255,255,255,0.88); font-size:13px;">Ficha de clientes</p>
+              <p style="margin:8px 0 0; color:rgba(255,255,255,0.88); font-size:13px;">Panel SAC — Ficha de clientes</p>
             </td>
           </tr>
 
+          <!-- Cuerpo con fondo suave con leve degradado -->
           <tr>
             <td style="background: linear-gradient(180deg, #FFFFFF 0%, #FCFBFE 100%); padding: 32px 28px 8px;">
               <p style="font-size:14px; color:#3B3358; line-height:1.6; margin:0 0 16px;">
@@ -66,6 +61,7 @@ function plantillaInvitacion({ nombre, rolTexto, link }: { nombre: string; rolTe
             </td>
           </tr>
 
+          <!-- Botón con degradado -->
           <tr>
             <td style="background: linear-gradient(180deg, #FCFBFE 0%, #FFFFFF 100%); padding: 8px 28px 32px; text-align:center;">
               <a href="${link}" style="display:inline-block; background: linear-gradient(135deg, #8C7EC7 0%, #7A6BB0 100%); color:#ffffff; text-decoration:none; font-size:14px; font-weight:700; padding:13px 32px; border-radius:10px; box-shadow: 0 4px 14px rgba(122,107,176,0.35);">
@@ -74,6 +70,7 @@ function plantillaInvitacion({ nombre, rolTexto, link }: { nombre: string; rolTe
             </td>
           </tr>
 
+          <!-- Nota -->
           <tr>
             <td style="padding: 0 28px 28px; background-color:#FFFFFF;">
               <p style="font-size:11.5px; color:#9C93B5; line-height:1.5; margin:0;">
@@ -82,12 +79,13 @@ function plantillaInvitacion({ nombre, rolTexto, link }: { nombre: string; rolTe
             </td>
           </tr>
 
+          <!-- Franja de acento morado + verde -->
           <tr>
             <td style="height:5px; background: linear-gradient(90deg, #7A6BB0 0%, #5E9C7C 100%); font-size:0; line-height:0;">&nbsp;</td>
           </tr>
         </table>
 
-        <p style="font-size:11px; color:#9C93B5; margin-top:20px;">Runa</p>
+        <p style="font-size:11px; color:#9C93B5; margin-top:20px;">Runa — Panel SAC</p>
       </td>
     </tr>
   </table>
@@ -124,17 +122,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: perfilInvitador } = await supabaseClient
+    const { data: perfil } = await supabaseClient
       .from('perfiles')
       .select('rol')
       .eq('id', user.id)
       .single();
 
-    const rolInvitador = perfilInvitador?.rol;
-
-    // Solo admin y lider pueden invitar
-    if (rolInvitador !== 'admin' && rolInvitador !== 'lider') {
-      return new Response(JSON.stringify({ error: 'No tienes permisos para invitar usuarios' }), {
+    if (perfil?.rol !== 'admin') {
+      return new Response(JSON.stringify({ error: 'Solo un administrador puede invitar usuarios' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -146,16 +141,6 @@ Deno.serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
-    }
-
-    // Determinar el rol final según quién invita
-    let rolFinal: string;
-    if (rolInvitador === 'admin') {
-      // Admin puede asignar cualquier rol válido
-      rolFinal = ['admin', 'lider', 'agente', 'vista'].includes(rol) ? rol : 'agente';
-    } else {
-      // Lider solo puede crear agente o vista — nunca admin ni lider
-      rolFinal = ['agente', 'vista'].includes(rol) ? rol : 'agente';
     }
 
     const supabaseAdmin = createClient(
@@ -178,6 +163,8 @@ Deno.serve(async (req) => {
       });
     }
 
+    const rolFinal = rol === 'admin' ? 'admin' : 'agente';
+
     if (linkData.user) {
       await supabaseAdmin
         .from('perfiles')
@@ -185,6 +172,7 @@ Deno.serve(async (req) => {
         .eq('id', linkData.user.id);
     }
 
+    // Envía el correo vía SMTP de Gmail/Google Workspace, usando el alias runa@enternet.cl
     try {
       const client = new SMTPClient({
         content_encoding: 'base64',
@@ -200,12 +188,12 @@ Deno.serve(async (req) => {
       });
 
       await client.send({
-        from: `Runa <${Deno.env.get('GMAIL_USER')}>`,
+        from: `Runa <${Deno.env.get('GMAIL_FROM') ?? Deno.env.get('GMAIL_USER')}>`,
         to: email,
-        subject: 'Te invitaron a Runa',
+        subject: 'Te invitaron a Runa — Panel SAC',
         html: minificarHtml(plantillaInvitacion({
           nombre: nombre_completo || '',
-          rolTexto: etiquetaRol(rolFinal),
+          rolTexto: rolFinal === 'admin' ? 'Administrador' : 'Agente SAC',
           link: linkData.properties.action_link,
         })),
       });

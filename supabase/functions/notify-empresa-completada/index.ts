@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
 
     for (const correo of correosAdmins) {
       await client.send({
-        from: `Runa <${Deno.env.get('GMAIL_USER')}>`,
+        from: `Runa <${Deno.env.get('GMAIL_FROM') ?? Deno.env.get('GMAIL_USER')}>`,
         to: correo,
         subject: `Empresa completada: ${razonSocial}`,
         html,

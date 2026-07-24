@@ -1,8 +1,4 @@
 // supabase/functions/delete-user/index.ts
-//
-// Elimina la cuenta de un usuario del equipo SAC.
-// Solo puede ser llamada por un admin (se verifica adentro).
-// No permite que un admin se elimine a sí mismo (evita quedar sin acceso).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -17,6 +13,17 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Leer el body PRIMERO antes de cualquier otra operación async
+    const body = await req.json();
+    const { userId } = body;
+
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'Falta el ID del usuario' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'No autorizado' }), {
@@ -39,30 +46,24 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: perfil } = await supabaseClient
+    if (userId === user.id) {
+      return new Response(JSON.stringify({ error: 'No puedes eliminar tu propia cuenta' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { data: perfilInvocador } = await supabaseClient
       .from('perfiles')
       .select('rol')
       .eq('id', user.id)
       .single();
 
-    if (perfil?.rol !== 'admin') {
-      return new Response(JSON.stringify({ error: 'Solo un administrador puede eliminar usuarios' }), {
+    const rolInvocador = perfilInvocador?.rol;
+
+    if (rolInvocador !== 'admin' && rolInvocador !== 'lider') {
+      return new Response(JSON.stringify({ error: 'No tienes permisos para eliminar usuarios' }), {
         status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const { userId } = await req.json();
-    if (!userId) {
-      return new Response(JSON.stringify({ error: 'Falta el ID del usuario' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (userId === user.id) {
-      return new Response(JSON.stringify({ error: 'No puedes eliminar tu propia cuenta' }), {
-        status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -71,6 +72,22 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    // Si es lider, verificar que el usuario a eliminar sea agente o vista
+    if (rolInvocador === 'lider') {
+      const { data: perfilObjetivo } = await supabaseAdmin
+        .from('perfiles')
+        .select('rol')
+        .eq('id', userId)
+        .single();
+
+      if (!perfilObjetivo || !['agente', 'vista'].includes(perfilObjetivo.rol)) {
+        return new Response(JSON.stringify({ error: 'El líder solo puede eliminar cuentas de agente o vista' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
 
     const { error: errorDelete } = await supabaseAdmin.auth.admin.deleteUser(userId);
 

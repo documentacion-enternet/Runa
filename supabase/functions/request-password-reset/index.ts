@@ -1,7 +1,10 @@
 // supabase/functions/request-password-reset/index.ts
 //
 // Envía el correo de "olvidé mi contraseña" con diseño propio de Runa.
-// No requiere estar logueado. Siempre responde con éxito por seguridad.
+// A diferencia de invite-user y delete-user, esta función NO requiere estar
+// logueado (justamente la usa alguien que no puede entrar).
+// Por seguridad, SIEMPRE responde con éxito, exista o no ese correo en el
+// sistema — así nadie puede usarla para averiguar qué correos están registrados.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { SMTPClient } from 'https://deno.land/x/denomailer/mod.ts';
@@ -11,6 +14,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Aplana el HTML a espacios simples y sin saltos de línea — evita bugs de "quoted-printable"
+// en algunos SMTP donde los saltos de línea largos dentro del cuerpo quedan mal decodificados.
 function minificarHtml(html: string): string {
   return html.replace(/\r?\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
 }
@@ -30,7 +35,7 @@ function plantillaRecuperacion({ link }: { link: string }) {
             <td style="background: linear-gradient(135deg, #8C7EC7 0%, #7A6BB0 45%, #5B4E82 100%); padding: 36px 24px; text-align:center;">
               <div style="width:52px; height:52px; background-color:rgba(255,255,255,0.18); border-radius:14px; display:inline-block; line-height:52px; font-size:22px; font-weight:bold; color:#ffffff; margin-bottom:14px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);">R</div>
               <h1 style="margin:0; color:#ffffff; font-size:23px; font-weight:800;">Restablece tu contraseña</h1>
-              <p style="margin:8px 0 0; color:rgba(255,255,255,0.88); font-size:13px;">Ficha de clientes</p>
+              <p style="margin:8px 0 0; color:rgba(255,255,255,0.88); font-size:13px;">Panel SAC — Ficha de clientes</p>
             </td>
           </tr>
 
@@ -66,7 +71,7 @@ function plantillaRecuperacion({ link }: { link: string }) {
           </tr>
         </table>
 
-        <p style="font-size:11px; color:#9C93B5; margin-top:20px;">Runa</p>
+        <p style="font-size:11px; color:#9C93B5; margin-top:20px;">Runa — Panel SAC</p>
       </td>
     </tr>
   </table>
@@ -80,6 +85,7 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // Respuesta genérica que se usa siempre, exista o no la cuenta (evita filtrar qué correos existen)
   const respuestaGenerica = new Response(
     JSON.stringify({ success: true, message: 'Si el correo existe en Runa, te llegará un link para restablecer tu contraseña.' }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -102,6 +108,7 @@ Deno.serve(async (req) => {
       },
     });
 
+    // Si el correo no existe, generateLink falla — no revelamos nada, solo no mandamos correo
     if (errorLink || !linkData?.properties?.action_link) {
       return respuestaGenerica;
     }
@@ -121,7 +128,7 @@ Deno.serve(async (req) => {
       });
 
       await client.send({
-        from: `Runa <${Deno.env.get('GMAIL_USER')}>`,
+        from: `Runa <${Deno.env.get('GMAIL_FROM') ?? Deno.env.get('GMAIL_USER')}>`,
         to: email,
         subject: 'Restablece tu contraseña — Runa',
         html: minificarHtml(plantillaRecuperacion({ link: linkData.properties.action_link })),
@@ -129,7 +136,7 @@ Deno.serve(async (req) => {
 
       await client.close();
     } catch {
-      // Si falla el envío, respondemos genérico igual
+      // Si falla el envío, igual respondemos genérico — no delatamos detalles técnicos a quien llama
     }
 
     return respuestaGenerica;
