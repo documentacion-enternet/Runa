@@ -211,7 +211,7 @@ export default function FormularioInscripcion() {
     const { data: existentes } = await supabase
       .from('empresas')
       .select('id')
-      .or(`empkey.eq.${empkey},rut.eq.${rut}`);
+      .eq('empkey', Number(empkey))
 
     const duplicado = existentes?.find((e) => e.id !== empresaId);
     if (duplicado) return 'Ya existe otra empresa con ese Empkey o RUT';

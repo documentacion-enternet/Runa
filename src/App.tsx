@@ -1,12 +1,13 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { ProtectedRoute, ProtectedRouteGestores, ProtectedRouteSinVista } from './components/ProtectedRoute';
+import { ProtectedRoute, ProtectedRouteAdmin, ProtectedRouteGestores, ProtectedRouteSinVista } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import Login from './pages/Login';
 import Empresas from './pages/Empresas';
 import FichaEmpresa from './pages/FichaEmpresa';
 import FormularioInscripcion from './pages/FormularioInscripcion';
 import GestionUsuarios from './pages/GestionUsuarios';
+import ImportarCsv from './pages/ImportarCsv';
 import DefinirContrasena from './pages/DefinirContrasena';
 
 function App() {
@@ -23,18 +24,17 @@ function App() {
               </ProtectedRoute>
             }
           >
-            {/* Empresas y Ficha: todos los roles logueados pueden ver */}
             <Route path="/" element={<Empresas />} />
             <Route path="/empresas/:empkey" element={<FichaEmpresa />} />
 
-            {/* Gestión de Usuarios: solo admin y lider */}
+            {/* Gestión de Usuarios: admin y lider */}
             <Route path="/gestion-usuarios" element={
               <ProtectedRouteGestores>
                 <GestionUsuarios />
               </ProtectedRouteGestores>
             } />
 
-            {/* Formulario de Inscripción: admin, lider y agente — no vista */}
+            {/* Formulario de Inscripción: todos menos vista */}
             <Route path="/formulario-inscripcion" element={
               <ProtectedRouteSinVista>
                 <FormularioInscripcion />
@@ -44,6 +44,13 @@ function App() {
               <ProtectedRouteSinVista>
                 <FormularioInscripcion />
               </ProtectedRouteSinVista>
+            } />
+
+            {/* Importar CSV: solo admin */}
+            <Route path="/importar-csv" element={
+              <ProtectedRouteAdmin>
+                <ImportarCsv />
+              </ProtectedRouteAdmin>
             } />
           </Route>
         </Routes>

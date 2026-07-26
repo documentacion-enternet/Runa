@@ -8,6 +8,7 @@ import {
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { LockOutlined as LockOutlinedIcon } from '@mui/icons-material';
@@ -26,7 +27,7 @@ const ETIQUETA_ROL: Record<string, string> = {
 export function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { perfil, cerrarSesion, esVista, puedeGestionar } = useAuth();
+  const { perfil, cerrarSesion, esVista, puedeGestionar, esAdmin } = useAuth();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [dialogoContrasenaAbierto, setDialogoContrasenaAbierto] = useState(false);
   const [nuevaContrasena, setNuevaContrasena] = useState('');
@@ -73,13 +74,11 @@ export function Sidebar() {
   const nombreMostrar = perfil?.nombre_completo || perfil?.correo || 'Usuario';
   const iniciales = nombreMostrar.slice(0, 2).toUpperCase();
 
-  // Construir items de navegación según rol
   const navItems = [
     { label: 'Empresas', path: '/', icon: <BusinessOutlinedIcon fontSize="small" /> },
-    // Formulario de Inscripción: visible para todos excepto vista
     ...(!esVista ? [{ label: 'Formulario de Inscripción', path: '/formulario-inscripcion', icon: <AssignmentOutlinedIcon fontSize="small" /> }] : []),
-    // Gestión de Usuarios: visible para admin y lider
     ...(puedeGestionar ? [{ label: 'Gestión de Usuarios', path: '/gestion-usuarios', icon: <PeopleOutlinedIcon fontSize="small" /> }] : []),
+    ...(esAdmin ? [{ label: 'Importar CSV', path: '/importar-csv', icon: <UploadFileOutlinedIcon fontSize="small" /> }] : []),
   ];
 
   return (

@@ -7,6 +7,8 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
+import DeleteForeverOutlinedIcon from '@mui/icons-material/DeleteForeverOutlined';
 import { supabase } from '../lib/supabaseClient';
 import { MONO_FONT } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
@@ -54,14 +56,20 @@ function CardEmpresa({
   empresa,
   onClick,
   puedeAsignar,
+  esAdmin,
   agentes,
   onAsignar,
+  onEliminarSuave,
+  onEliminarPermanente,
 }: {
   empresa: Empresa;
   onClick: () => void;
   puedeAsignar: boolean;
+  esAdmin: boolean;
   agentes: AgentePerfil[];
   onAsignar: (empresa: Empresa) => void;
+  onEliminarSuave: (empresa: Empresa) => void;
+  onEliminarPermanente: (empresa: Empresa) => void;
 }) {
   const esBorrador = !empresa.completado;
 
@@ -95,7 +103,6 @@ function CardEmpresa({
             · Empkey {empresa.empkey}
           </Typography>
         </Box>
-        {/* Indicador de asignación en borradores */}
         {esBorrador && (
           <Typography sx={{ fontSize: 10.5, color: empresa.asignado_a ? 'primary.main' : 'text.disabled', mt: 0.3 }}>
             {empresa.asignado_a
@@ -105,17 +112,43 @@ function CardEmpresa({
         )}
       </Box>
 
-      {/* Botón de asignación — solo en borradores y para admin/lider */}
-      {esBorrador && puedeAsignar && (
-        <Tooltip title="Asignar agente">
-          <IconButton
-            size="small"
-            onClick={(e) => { e.stopPropagation(); onAsignar(empresa); }}
-            sx={{ color: empresa.asignado_a ? 'primary.main' : 'text.disabled', flexShrink: 0 }}
-          >
-            <PersonAddOutlinedIcon sx={{ fontSize: 18 }} />
-          </IconButton>
-        </Tooltip>
+      {esBorrador && (
+        <Box sx={{ display: 'flex', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+          {/* Asignar agente — admin y lider */}
+          {puedeAsignar && (
+            <Tooltip title="Asignar agente">
+              <IconButton
+                size="small"
+                onClick={() => onAsignar(empresa)}
+                sx={{ color: empresa.asignado_a ? 'primary.main' : 'text.disabled' }}
+              >
+                <PersonAddOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+          {/* Borrado suave — todos (admin, lider, agente) */}
+          <Tooltip title="Eliminar borrador">
+            <IconButton
+              size="small"
+              onClick={() => onEliminarSuave(empresa)}
+              sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}
+            >
+              <DeleteOutlineIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          {/* Borrado permanente — solo admin */}
+          {esAdmin && (
+            <Tooltip title="Eliminar permanentemente">
+              <IconButton
+                size="small"
+                onClick={() => onEliminarPermanente(empresa)}
+                sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}
+              >
+                <DeleteForeverOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
       )}
     </Card>
   );
@@ -126,14 +159,25 @@ export default function Empresas() {
   const [cargando, setCargando] = useState(true);
   const [query, setQuery] = useState('');
   const [agentes, setAgentes] = useState<AgentePerfil[]>([]);
+
+  // Asignación
   const [empresaAsignando, setEmpresaAsignando] = useState<Empresa | null>(null);
   const [agenteSel, setAgenteSel] = useState<string>('');
   const [guardandoAsignacion, setGuardandoAsignacion] = useState(false);
+
+  // Eliminar suave
+  const [empresaEliminandoSuave, setEmpresaEliminandoSuave] = useState<Empresa | null>(null);
+  const [procesandoEliminacion, setProcesandoEliminacion] = useState(false);
+
+  // Eliminar permanente (admin, desde borrador)
+  const [empresaEliminandoPermanente, setEmpresaEliminandoPermanente] = useState<Empresa | null>(null);
+  const [textoConfirmacion, setTextoConfirmacion] = useState('');
+  const [procesandoEliminacionPermanente, setProcesandoEliminacionPermanente] = useState(false);
+
   const navigate = useNavigate();
   const { esAdmin, esLider } = useAuth();
 
   const puedeAsignar = esAdmin || esLider;
-  // Lider y admin ven eliminadas; agente y vista no (RLS ya filtra, esto es para la UI)
   const puedeVerEliminadas = esAdmin || esLider;
 
   const SECCIONES: { key: 'activa' | 'borrador' | 'caducada' | 'eliminada'; titulo: string; color: string }[] = [
@@ -149,7 +193,6 @@ export default function Empresas() {
         .from('empresas')
         .select('id, empkey, rut, razon_social, nombre_fantasia, completado, estado_empresa, asignado_a')
         .order('empkey', { ascending: true });
-
       if (!error && data) setEmpresas(data);
       setCargando(false);
     }
@@ -191,6 +234,7 @@ export default function Empresas() {
     navigate(empresa.completado ? `/empresas/${empresa.empkey}` : `/formulario-inscripcion/${empresa.empkey}`);
   }
 
+  // Asignación
   function abrirDialogoAsignacion(empresa: Empresa) {
     setEmpresaAsignando(empresa);
     setAgenteSel(empresa.asignado_a ?? '');
@@ -204,13 +248,66 @@ export default function Empresas() {
       .update({ asignado_a: agenteSel || null })
       .eq('id', empresaAsignando.id);
     setGuardandoAsignacion(false);
-
     if (!error) {
       setEmpresas((prev) =>
         prev.map((e) => e.id === empresaAsignando.id ? { ...e, asignado_a: agenteSel || null } : e)
       );
     }
     setEmpresaAsignando(null);
+  }
+
+  // Eliminar suave (pasa a estado 'eliminada')
+  async function confirmarEliminacionSuave() {
+    if (!empresaEliminandoSuave) return;
+    setProcesandoEliminacion(true);
+    const { error } = await supabase
+      .from('empresas')
+      .update({ estado_empresa: 'eliminada' })
+      .eq('id', empresaEliminandoSuave.id);
+    setProcesandoEliminacion(false);
+    if (!error) {
+      // Si el usuario no puede ver eliminadas, la sacamos del estado local
+      // Si puede verlas (admin/lider), actualizamos el estado
+      if (puedeVerEliminadas) {
+        setEmpresas((prev) =>
+          prev.map((e) => e.id === empresaEliminandoSuave.id ? { ...e, estado_empresa: 'eliminada' } : e)
+        );
+      } else {
+        setEmpresas((prev) => prev.filter((e) => e.id !== empresaEliminandoSuave.id));
+      }
+    }
+    setEmpresaEliminandoSuave(null);
+  }
+
+  // Eliminar permanente desde borrador (solo admin, llama a la misma Edge Function)
+  async function confirmarEliminacionPermanente() {
+    if (!empresaEliminandoPermanente) return;
+    setProcesandoEliminacionPermanente(true);
+
+    const { data, error } = await supabase.functions.invoke('permanently-delete-empresa', {
+      body: { empresaId: empresaEliminandoPermanente.id },
+    });
+
+    setProcesandoEliminacionPermanente(false);
+
+    if (error || data?.error) {
+      // Si falla porque requiere estado 'eliminada', primero lo marcamos y reintentamos
+      // La función permanently-delete-empresa requiere estado_empresa = 'eliminada'
+      // así que para borradores hacemos el cambio previo
+      await supabase.from('empresas').update({ estado_empresa: 'eliminada' }).eq('id', empresaEliminandoPermanente.id);
+      const { data: data2, error: error2 } = await supabase.functions.invoke('permanently-delete-empresa', {
+        body: { empresaId: empresaEliminandoPermanente.id },
+      });
+      if (error2 || data2?.error) {
+        setEmpresaEliminandoPermanente(null);
+        setTextoConfirmacion('');
+        return;
+      }
+    }
+
+    setEmpresas((prev) => prev.filter((e) => e.id !== empresaEliminandoPermanente.id));
+    setEmpresaEliminandoPermanente(null);
+    setTextoConfirmacion('');
   }
 
   const nombreAgente = (id: string | null) => {
@@ -270,8 +367,11 @@ export default function Empresas() {
                       empresa={empresa}
                       onClick={() => irAEmpresa(empresa)}
                       puedeAsignar={puedeAsignar}
+                      esAdmin={esAdmin}
                       agentes={agentes}
                       onAsignar={abrirDialogoAsignacion}
+                      onEliminarSuave={setEmpresaEliminandoSuave}
+                      onEliminarPermanente={(e) => { setEmpresaEliminandoPermanente(e); setTextoConfirmacion(''); }}
                     />
                   </Grid>
                 ))}
@@ -281,7 +381,7 @@ export default function Empresas() {
         })
       )}
 
-      {/* Diálogo: Asignar agente a borrador */}
+      {/* Diálogo: Asignar agente */}
       <Dialog open={!!empresaAsignando} onClose={() => setEmpresaAsignando(null)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>Asignar agente</DialogTitle>
         <DialogContent>
@@ -314,6 +414,52 @@ export default function Empresas() {
           <Button onClick={() => setEmpresaAsignando(null)} sx={{ color: 'text.secondary' }}>Cancelar</Button>
           <Button onClick={guardarAsignacion} disabled={guardandoAsignacion} variant="contained">
             {guardandoAsignacion ? 'Guardando...' : 'Guardar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Diálogo: Eliminar suave */}
+      <Dialog open={!!empresaEliminandoSuave} onClose={() => setEmpresaEliminandoSuave(null)}>
+        <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>¿Eliminar este borrador?</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>
+            <strong>{empresaEliminandoSuave?.razon_social}</strong> pasará a estado eliminada. Es reversible — un administrador puede reactivarla desde la ficha.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setEmpresaEliminandoSuave(null)} sx={{ color: 'text.secondary' }}>Cancelar</Button>
+          <Button onClick={confirmarEliminacionSuave} disabled={procesandoEliminacion} variant="contained" color="error">
+            {procesandoEliminacion ? 'Eliminando...' : 'Sí, eliminar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Diálogo: Eliminar permanente desde borrador (solo admin) */}
+      <Dialog open={!!empresaEliminandoPermanente} onClose={() => setEmpresaEliminandoPermanente(null)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ fontSize: 16, fontWeight: 700, color: 'error.main' }}>⚠️ Eliminar permanentemente</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: 13.5, color: 'text.secondary', mb: 2 }}>
+            Esta acción es <strong>irreversible</strong>. Se enviará un respaldo por correo a los admins antes de borrar.
+          </Typography>
+          <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 1 }}>
+            Escribe <strong>{empresaEliminandoPermanente?.razon_social}</strong> para confirmar:
+          </Typography>
+          <TextField
+            fullWidth size="small" autoFocus
+            value={textoConfirmacion}
+            onChange={(e) => setTextoConfirmacion(e.target.value)}
+            placeholder={empresaEliminandoPermanente?.razon_social}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setEmpresaEliminandoPermanente(null)} sx={{ color: 'text.secondary' }}>Cancelar</Button>
+          <Button
+            onClick={confirmarEliminacionPermanente}
+            disabled={procesandoEliminacionPermanente || textoConfirmacion.trim() !== empresaEliminandoPermanente?.razon_social}
+            variant="contained"
+            color="error"
+          >
+            {procesandoEliminacionPermanente ? 'Eliminando...' : 'Eliminar permanentemente'}
           </Button>
         </DialogActions>
       </Dialog>
