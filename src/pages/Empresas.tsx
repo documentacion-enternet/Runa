@@ -4,11 +4,13 @@ import {
   Box, Typography, TextField, InputAdornment, Grid, Card, Avatar,
   CircularProgress, IconButton, Dialog, DialogTitle, DialogContent,
   DialogActions, Button, MenuItem, Select, FormControl, InputLabel, Tooltip,
+  Checkbox, Chip,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import DeleteForeverOutlinedIcon from '@mui/icons-material/DeleteForeverOutlined';
+import GroupAddOutlinedIcon from '@mui/icons-material/GroupAddOutlined';
 import { supabase } from '../lib/supabaseClient';
 import { MONO_FONT } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
@@ -61,6 +63,9 @@ function CardEmpresa({
   onAsignar,
   onEliminarSuave,
   onEliminarPermanente,
+  seleccionada,
+  onToggleSeleccion,
+  modoSeleccion,
 }: {
   empresa: Empresa;
   onClick: () => void;
@@ -70,12 +75,15 @@ function CardEmpresa({
   onAsignar: (empresa: Empresa) => void;
   onEliminarSuave: (empresa: Empresa) => void;
   onEliminarPermanente: (empresa: Empresa) => void;
+  seleccionada: boolean;
+  onToggleSeleccion: (empresa: Empresa) => void;
+  modoSeleccion: boolean;
 }) {
   const esBorrador = !empresa.completado;
 
   return (
     <Card
-      onClick={onClick}
+      onClick={() => modoSeleccion && esBorrador ? onToggleSeleccion(empresa) : onClick()}
       sx={{
         p: 2.2,
         cursor: 'pointer',
@@ -83,11 +91,25 @@ function CardEmpresa({
         alignItems: 'center',
         gap: 1.5,
         opacity: empresa.estado_empresa !== 'activa' ? 0.7 : 1,
-        transition: 'border-color 0.15s',
+        transition: 'border-color 0.15s, box-shadow 0.15s',
         '&:hover': { borderColor: 'primary.main' },
+        ...(seleccionada && {
+          borderColor: 'primary.main',
+          boxShadow: '0 0 0 2px rgba(122,107,176,0.3)',
+        }),
         position: 'relative',
       }}
     >
+      {/* Checkbox de selección — solo en borradores cuando puedeAsignar */}
+      {esBorrador && puedeAsignar && (
+        <Checkbox
+          size="small"
+          checked={seleccionada}
+          onClick={(e) => { e.stopPropagation(); onToggleSeleccion(empresa); }}
+          sx={{ p: 0, flexShrink: 0, color: 'text.disabled', '&.Mui-checked': { color: 'primary.main' } }}
+        />
+      )}
+
       <Avatar sx={{ bgcolor: colorParaEmpresa(empresa.id), width: 42, height: 42, fontWeight: 700, fontSize: 14 }}>
         {iniciales(empresa.nombre_fantasia || empresa.razon_social)}
       </Avatar>
@@ -112,9 +134,8 @@ function CardEmpresa({
         )}
       </Box>
 
-      {esBorrador && (
+      {esBorrador && !modoSeleccion && (
         <Box sx={{ display: 'flex', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-          {/* Asignar agente — admin y lider */}
           {puedeAsignar && (
             <Tooltip title="Asignar agente">
               <IconButton
@@ -126,7 +147,6 @@ function CardEmpresa({
               </IconButton>
             </Tooltip>
           )}
-          {/* Borrado suave — todos (admin, lider, agente) */}
           <Tooltip title="Eliminar borrador">
             <IconButton
               size="small"
@@ -136,7 +156,6 @@ function CardEmpresa({
               <DeleteOutlineIcon sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
-          {/* Borrado permanente — solo admin */}
           {esAdmin && (
             <Tooltip title="Eliminar permanentemente">
               <IconButton
@@ -160,7 +179,13 @@ export default function Empresas() {
   const [query, setQuery] = useState('');
   const [agentes, setAgentes] = useState<AgentePerfil[]>([]);
 
-  // Asignación
+  // Selección múltiple
+  const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
+  const [dialogoAsignacionMasiva, setDialogoAsignacionMasiva] = useState(false);
+  const [agenteMasivo, setAgenteMasivo] = useState<string>('');
+  const [guardandoMasivo, setGuardandoMasivo] = useState(false);
+
+  // Asignación individual
   const [empresaAsignando, setEmpresaAsignando] = useState<Empresa | null>(null);
   const [agenteSel, setAgenteSel] = useState<string>('');
   const [guardandoAsignacion, setGuardandoAsignacion] = useState(false);
@@ -169,7 +194,7 @@ export default function Empresas() {
   const [empresaEliminandoSuave, setEmpresaEliminandoSuave] = useState<Empresa | null>(null);
   const [procesandoEliminacion, setProcesandoEliminacion] = useState(false);
 
-  // Eliminar permanente (admin, desde borrador)
+  // Eliminar permanente
   const [empresaEliminandoPermanente, setEmpresaEliminandoPermanente] = useState<Empresa | null>(null);
   const [textoConfirmacion, setTextoConfirmacion] = useState('');
   const [procesandoEliminacionPermanente, setProcesandoEliminacionPermanente] = useState(false);
@@ -179,6 +204,7 @@ export default function Empresas() {
 
   const puedeAsignar = esAdmin || esLider;
   const puedeVerEliminadas = esAdmin || esLider;
+  const modoSeleccion = seleccionadas.size > 0;
 
   const SECCIONES: { key: 'activa' | 'borrador' | 'caducada' | 'eliminada'; titulo: string; color: string }[] = [
     { key: 'activa', titulo: 'Activas', color: '#5E9C7C' },
@@ -230,11 +256,51 @@ export default function Empresas() {
     return mapa;
   }, [resultados]);
 
+  const borradores = grupos['borrador'] ?? [];
+
   function irAEmpresa(empresa: Empresa) {
     navigate(empresa.completado ? `/empresas/${empresa.empkey}` : `/formulario-inscripcion/${empresa.empkey}`);
   }
 
-  // Asignación
+  // Selección múltiple
+  function toggleSeleccion(empresa: Empresa) {
+    setSeleccionadas((prev) => {
+      const nuevo = new Set(prev);
+      if (nuevo.has(empresa.id)) nuevo.delete(empresa.id);
+      else nuevo.add(empresa.id);
+      return nuevo;
+    });
+  }
+
+  function seleccionarTodosBorradores() {
+    setSeleccionadas(new Set(borradores.map((e) => e.id)));
+  }
+
+  function limpiarSeleccion() {
+    setSeleccionadas(new Set());
+  }
+
+  // Asignación masiva
+  async function guardarAsignacionMasiva() {
+    if (!agenteMasivo && agenteMasivo !== '') return;
+    setGuardandoMasivo(true);
+    const ids = Array.from(seleccionadas);
+    const { error } = await supabase
+      .from('empresas')
+      .update({ asignado_a: agenteMasivo || null })
+      .in('id', ids);
+    setGuardandoMasivo(false);
+    if (!error) {
+      setEmpresas((prev) =>
+        prev.map((e) => ids.includes(e.id) ? { ...e, asignado_a: agenteMasivo || null } : e)
+      );
+    }
+    setDialogoAsignacionMasiva(false);
+    setAgenteMasivo('');
+    limpiarSeleccion();
+  }
+
+  // Asignación individual
   function abrirDialogoAsignacion(empresa: Empresa) {
     setEmpresaAsignando(empresa);
     setAgenteSel(empresa.asignado_a ?? '');
@@ -256,7 +322,7 @@ export default function Empresas() {
     setEmpresaAsignando(null);
   }
 
-  // Eliminar suave (pasa a estado 'eliminada')
+  // Eliminar suave
   async function confirmarEliminacionSuave() {
     if (!empresaEliminandoSuave) return;
     setProcesandoEliminacion(true);
@@ -266,8 +332,6 @@ export default function Empresas() {
       .eq('id', empresaEliminandoSuave.id);
     setProcesandoEliminacion(false);
     if (!error) {
-      // Si el usuario no puede ver eliminadas, la sacamos del estado local
-      // Si puede verlas (admin/lider), actualizamos el estado
       if (puedeVerEliminadas) {
         setEmpresas((prev) =>
           prev.map((e) => e.id === empresaEliminandoSuave.id ? { ...e, estado_empresa: 'eliminada' } : e)
@@ -279,32 +343,26 @@ export default function Empresas() {
     setEmpresaEliminandoSuave(null);
   }
 
-  // Eliminar permanente desde borrador (solo admin, llama a la misma Edge Function)
+  // Eliminar permanente
   async function confirmarEliminacionPermanente() {
     if (!empresaEliminandoPermanente) return;
     setProcesandoEliminacionPermanente(true);
-
     const { data, error } = await supabase.functions.invoke('permanently-delete-empresa', {
       body: { empresaId: empresaEliminandoPermanente.id },
     });
-
-    setProcesandoEliminacionPermanente(false);
-
     if (error || data?.error) {
-      // Si falla porque requiere estado 'eliminada', primero lo marcamos y reintentamos
-      // La función permanently-delete-empresa requiere estado_empresa = 'eliminada'
-      // así que para borradores hacemos el cambio previo
       await supabase.from('empresas').update({ estado_empresa: 'eliminada' }).eq('id', empresaEliminandoPermanente.id);
       const { data: data2, error: error2 } = await supabase.functions.invoke('permanently-delete-empresa', {
         body: { empresaId: empresaEliminandoPermanente.id },
       });
       if (error2 || data2?.error) {
+        setProcesandoEliminacionPermanente(false);
         setEmpresaEliminandoPermanente(null);
         setTextoConfirmacion('');
         return;
       }
     }
-
+    setProcesandoEliminacionPermanente(false);
     setEmpresas((prev) => prev.filter((e) => e.id !== empresaEliminandoPermanente.id));
     setEmpresaEliminandoPermanente(null);
     setTextoConfirmacion('');
@@ -340,6 +398,45 @@ export default function Empresas() {
         }}
       />
 
+      {/* Barra de selección masiva — aparece solo cuando hay borradores y puedeAsignar */}
+      {puedeAsignar && borradores.length > 0 && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
+          {modoSeleccion ? (
+            <>
+              <Chip
+                label={`${seleccionadas.size} seleccionada${seleccionadas.size !== 1 ? 's' : ''}`}
+                size="small"
+                sx={{ bgcolor: 'rgba(122,107,176,0.12)', color: 'primary.main', fontWeight: 700 }}
+              />
+              <Button
+                size="small"
+                startIcon={<GroupAddOutlinedIcon />}
+                variant="contained"
+                onClick={() => { setAgenteMasivo(''); setDialogoAsignacionMasiva(true); }}
+              >
+                Asignar seleccionadas
+              </Button>
+              <Button size="small" onClick={seleccionarTodosBorradores} sx={{ color: 'text.secondary' }}>
+                Seleccionar todos ({borradores.length})
+              </Button>
+              <Button size="small" onClick={limpiarSeleccion} sx={{ color: 'text.secondary' }}>
+                Cancelar
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="small"
+              startIcon={<GroupAddOutlinedIcon />}
+              variant="outlined"
+              onClick={seleccionarTodosBorradores}
+              sx={{ color: 'text.secondary', borderColor: 'divider' }}
+            >
+              Asignación masiva
+            </Button>
+          )}
+        </Box>
+      )}
+
       {cargando ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress sx={{ color: 'primary.main' }} />
@@ -372,6 +469,9 @@ export default function Empresas() {
                       onAsignar={abrirDialogoAsignacion}
                       onEliminarSuave={setEmpresaEliminandoSuave}
                       onEliminarPermanente={(e) => { setEmpresaEliminandoPermanente(e); setTextoConfirmacion(''); }}
+                      seleccionada={seleccionadas.has(empresa.id)}
+                      onToggleSeleccion={toggleSeleccion}
+                      modoSeleccion={modoSeleccion}
                     />
                   </Grid>
                 ))}
@@ -381,7 +481,38 @@ export default function Empresas() {
         })
       )}
 
-      {/* Diálogo: Asignar agente */}
+      {/* Diálogo: Asignación masiva */}
+      <Dialog open={dialogoAsignacionMasiva} onClose={() => setDialogoAsignacionMasiva(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>Asignar agente a {seleccionadas.size} empresa{seleccionadas.size !== 1 ? 's' : ''}</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 2 }}>
+            Todas las empresas seleccionadas quedarán asignadas al mismo agente.
+          </Typography>
+          <FormControl fullWidth size="small">
+            <InputLabel>Agente asignado</InputLabel>
+            <Select
+              value={agenteMasivo}
+              label="Agente asignado"
+              onChange={(e) => setAgenteMasivo(e.target.value)}
+            >
+              <MenuItem value=""><em>Sin asignar</em></MenuItem>
+              {agentes.map((a) => (
+                <MenuItem key={a.id} value={a.id}>
+                  {a.nombre_completo || a.correo}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setDialogoAsignacionMasiva(false)} sx={{ color: 'text.secondary' }}>Cancelar</Button>
+          <Button onClick={guardarAsignacionMasiva} disabled={guardandoMasivo} variant="contained">
+            {guardandoMasivo ? 'Asignando...' : 'Confirmar asignación'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Diálogo: Asignar agente individual */}
       <Dialog open={!!empresaAsignando} onClose={() => setEmpresaAsignando(null)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>Asignar agente</DialogTitle>
         <DialogContent>
@@ -434,7 +565,7 @@ export default function Empresas() {
         </DialogActions>
       </Dialog>
 
-      {/* Diálogo: Eliminar permanente desde borrador (solo admin) */}
+      {/* Diálogo: Eliminar permanente */}
       <Dialog open={!!empresaEliminandoPermanente} onClose={() => setEmpresaEliminandoPermanente(null)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontSize: 16, fontWeight: 700, color: 'error.main' }}>⚠️ Eliminar permanentemente</DialogTitle>
         <DialogContent>
