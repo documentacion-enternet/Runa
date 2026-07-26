@@ -4,13 +4,14 @@ import {
   Box, Typography, TextField, InputAdornment, Grid, Card, Avatar,
   CircularProgress, IconButton, Dialog, DialogTitle, DialogContent,
   DialogActions, Button, MenuItem, Select, FormControl, InputLabel, Tooltip,
-  Checkbox, Chip,
+  Checkbox, Chip, ToggleButton,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import DeleteForeverOutlinedIcon from '@mui/icons-material/DeleteForeverOutlined';
 import GroupAddOutlinedIcon from '@mui/icons-material/GroupAddOutlined';
+import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import { supabase } from '../lib/supabaseClient';
 import { MONO_FONT } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
@@ -55,29 +56,14 @@ function grupoDeEmpresa(e: Empresa): 'borrador' | 'activa' | 'caducada' | 'elimi
 }
 
 function CardEmpresa({
-  empresa,
-  onClick,
-  puedeAsignar,
-  esAdmin,
-  agentes,
-  onAsignar,
-  onEliminarSuave,
-  onEliminarPermanente,
-  seleccionada,
-  onToggleSeleccion,
-  modoSeleccion,
+  empresa, onClick, puedeAsignar, esAdmin, agentes,
+  onAsignar, onEliminarSuave, onEliminarPermanente,
+  seleccionada, onToggleSeleccion, modoSeleccion,
 }: {
-  empresa: Empresa;
-  onClick: () => void;
-  puedeAsignar: boolean;
-  esAdmin: boolean;
-  agentes: AgentePerfil[];
-  onAsignar: (empresa: Empresa) => void;
-  onEliminarSuave: (empresa: Empresa) => void;
-  onEliminarPermanente: (empresa: Empresa) => void;
-  seleccionada: boolean;
-  onToggleSeleccion: (empresa: Empresa) => void;
-  modoSeleccion: boolean;
+  empresa: Empresa; onClick: () => void; puedeAsignar: boolean; esAdmin: boolean;
+  agentes: AgentePerfil[]; onAsignar: (e: Empresa) => void;
+  onEliminarSuave: (e: Empresa) => void; onEliminarPermanente: (e: Empresa) => void;
+  seleccionada: boolean; onToggleSeleccion: (e: Empresa) => void; modoSeleccion: boolean;
 }) {
   const esBorrador = !empresa.completado;
 
@@ -85,31 +71,20 @@ function CardEmpresa({
     <Card
       onClick={() => modoSeleccion && esBorrador ? onToggleSeleccion(empresa) : onClick()}
       sx={{
-        p: 2.2,
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1.5,
+        p: 2.2, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 1.5,
         opacity: empresa.estado_empresa !== 'activa' ? 0.7 : 1,
         transition: 'border-color 0.15s, box-shadow 0.15s',
         '&:hover': { borderColor: 'primary.main' },
-        ...(seleccionada && {
-          borderColor: 'primary.main',
-          boxShadow: '0 0 0 2px rgba(122,107,176,0.3)',
-        }),
-        position: 'relative',
+        ...(seleccionada && { borderColor: 'primary.main', boxShadow: '0 0 0 2px rgba(122,107,176,0.3)' }),
       }}
     >
-      {/* Checkbox de selección — solo en borradores cuando puedeAsignar */}
       {esBorrador && puedeAsignar && (
         <Checkbox
-          size="small"
-          checked={seleccionada}
+          size="small" checked={seleccionada}
           onClick={(e) => { e.stopPropagation(); onToggleSeleccion(empresa); }}
           sx={{ p: 0, flexShrink: 0, color: 'text.disabled', '&.Mui-checked': { color: 'primary.main' } }}
         />
       )}
-
       <Avatar sx={{ bgcolor: colorParaEmpresa(empresa.id), width: 42, height: 42, fontWeight: 700, fontSize: 14 }}>
         {iniciales(empresa.nombre_fantasia || empresa.razon_social)}
       </Avatar>
@@ -121,9 +96,7 @@ function CardEmpresa({
           <Typography sx={{ fontFamily: MONO_FONT, fontSize: 11, color: 'secondary.main', fontWeight: 600 }}>
             {empresa.rut}
           </Typography>
-          <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>
-            · Empkey {empresa.empkey}
-          </Typography>
+          <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>· Empkey {empresa.empkey}</Typography>
         </Box>
         {esBorrador && (
           <Typography sx={{ fontSize: 10.5, color: empresa.asignado_a ? 'primary.main' : 'text.disabled', mt: 0.3 }}>
@@ -133,36 +106,26 @@ function CardEmpresa({
           </Typography>
         )}
       </Box>
-
       {esBorrador && !modoSeleccion && (
         <Box sx={{ display: 'flex', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
           {puedeAsignar && (
             <Tooltip title="Asignar agente">
-              <IconButton
-                size="small"
-                onClick={() => onAsignar(empresa)}
-                sx={{ color: empresa.asignado_a ? 'primary.main' : 'text.disabled' }}
-              >
+              <IconButton size="small" onClick={() => onAsignar(empresa)}
+                sx={{ color: empresa.asignado_a ? 'primary.main' : 'text.disabled' }}>
                 <PersonAddOutlinedIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
           )}
           <Tooltip title="Eliminar borrador">
-            <IconButton
-              size="small"
-              onClick={() => onEliminarSuave(empresa)}
-              sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}
-            >
+            <IconButton size="small" onClick={() => onEliminarSuave(empresa)}
+              sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
               <DeleteOutlineIcon sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
           {esAdmin && (
             <Tooltip title="Eliminar permanentemente">
-              <IconButton
-                size="small"
-                onClick={() => onEliminarPermanente(empresa)}
-                sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}
-              >
+              <IconButton size="small" onClick={() => onEliminarPermanente(empresa)}
+                sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
                 <DeleteForeverOutlinedIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
@@ -177,30 +140,28 @@ export default function Empresas() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [cargando, setCargando] = useState(true);
   const [query, setQuery] = useState('');
+  const [soloMias, setSoloMias] = useState(false);
   const [agentes, setAgentes] = useState<AgentePerfil[]>([]);
 
-  // Selección múltiple
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
   const [dialogoAsignacionMasiva, setDialogoAsignacionMasiva] = useState(false);
   const [agenteMasivo, setAgenteMasivo] = useState<string>('');
   const [guardandoMasivo, setGuardandoMasivo] = useState(false);
 
-  // Asignación individual
   const [empresaAsignando, setEmpresaAsignando] = useState<Empresa | null>(null);
   const [agenteSel, setAgenteSel] = useState<string>('');
   const [guardandoAsignacion, setGuardandoAsignacion] = useState(false);
 
-  // Eliminar suave
   const [empresaEliminandoSuave, setEmpresaEliminandoSuave] = useState<Empresa | null>(null);
   const [procesandoEliminacion, setProcesandoEliminacion] = useState(false);
 
-  // Eliminar permanente
   const [empresaEliminandoPermanente, setEmpresaEliminandoPermanente] = useState<Empresa | null>(null);
   const [textoConfirmacion, setTextoConfirmacion] = useState('');
   const [procesandoEliminacionPermanente, setProcesandoEliminacionPermanente] = useState(false);
 
   const navigate = useNavigate();
-  const { esAdmin, esLider } = useAuth();
+  const { session, esAdmin, esLider } = useAuth();
+  const userId = session?.user.id;
 
   const puedeAsignar = esAdmin || esLider;
   const puedeVerEliminadas = esAdmin || esLider;
@@ -228,10 +189,10 @@ export default function Empresas() {
   useEffect(() => {
     if (!puedeAsignar) return;
     async function fetchAgentes() {
+      // Incluir todos los roles para que admin/lider también puedan asignarse empresas a sí mismos
       const { data } = await supabase
         .from('perfiles')
         .select('id, nombre_completo, correo')
-        .in('rol', ['agente', 'vista'])
         .order('nombre_completo', { ascending: true });
       setAgentes(data ?? []);
     }
@@ -239,16 +200,21 @@ export default function Empresas() {
   }, [puedeAsignar]);
 
   const resultados = useMemo(() => {
-    if (!query.trim()) return empresas;
+    let base = empresas;
+    // Filtro "solo las mías": borradores asignados al usuario logueado
+    if (soloMias && userId) {
+      base = base.filter((e) => !e.completado && e.asignado_a === userId);
+    }
+    if (!query.trim()) return base;
     const q = query.toLowerCase();
-    return empresas.filter(
+    return base.filter(
       (e) =>
         e.rut.toLowerCase().includes(q) ||
         String(e.empkey).includes(q) ||
         e.razon_social.toLowerCase().includes(q) ||
         (e.nombre_fantasia?.toLowerCase().includes(q) ?? false)
     );
-  }, [empresas, query]);
+  }, [empresas, query, soloMias, userId]);
 
   const grupos = useMemo(() => {
     const mapa: Record<string, Empresa[]> = { activa: [], borrador: [], caducada: [], eliminada: [] };
@@ -257,12 +223,12 @@ export default function Empresas() {
   }, [resultados]);
 
   const borradores = grupos['borrador'] ?? [];
+  const misEmpresas = empresas.filter((e) => !e.completado && e.asignado_a === userId);
 
   function irAEmpresa(empresa: Empresa) {
     navigate(empresa.completado ? `/empresas/${empresa.empkey}` : `/formulario-inscripcion/${empresa.empkey}`);
   }
 
-  // Selección múltiple
   function toggleSeleccion(empresa: Empresa) {
     setSeleccionadas((prev) => {
       const nuevo = new Set(prev);
@@ -276,31 +242,20 @@ export default function Empresas() {
     setSeleccionadas(new Set(borradores.map((e) => e.id)));
   }
 
-  function limpiarSeleccion() {
-    setSeleccionadas(new Set());
-  }
+  function limpiarSeleccion() { setSeleccionadas(new Set()); }
 
-  // Asignación masiva
   async function guardarAsignacionMasiva() {
-    if (!agenteMasivo && agenteMasivo !== '') return;
+    if (agenteMasivo === undefined) return;
     setGuardandoMasivo(true);
     const ids = Array.from(seleccionadas);
-    const { error } = await supabase
-      .from('empresas')
-      .update({ asignado_a: agenteMasivo || null })
-      .in('id', ids);
+    const { error } = await supabase.from('empresas').update({ asignado_a: agenteMasivo || null }).in('id', ids);
     setGuardandoMasivo(false);
-    if (!error) {
-      setEmpresas((prev) =>
-        prev.map((e) => ids.includes(e.id) ? { ...e, asignado_a: agenteMasivo || null } : e)
-      );
-    }
+    if (!error) setEmpresas((prev) => prev.map((e) => ids.includes(e.id) ? { ...e, asignado_a: agenteMasivo || null } : e));
     setDialogoAsignacionMasiva(false);
     setAgenteMasivo('');
     limpiarSeleccion();
   }
 
-  // Asignación individual
   function abrirDialogoAsignacion(empresa: Empresa) {
     setEmpresaAsignando(empresa);
     setAgenteSel(empresa.asignado_a ?? '');
@@ -309,58 +264,32 @@ export default function Empresas() {
   async function guardarAsignacion() {
     if (!empresaAsignando) return;
     setGuardandoAsignacion(true);
-    const { error } = await supabase
-      .from('empresas')
-      .update({ asignado_a: agenteSel || null })
-      .eq('id', empresaAsignando.id);
+    const { error } = await supabase.from('empresas').update({ asignado_a: agenteSel || null }).eq('id', empresaAsignando.id);
     setGuardandoAsignacion(false);
-    if (!error) {
-      setEmpresas((prev) =>
-        prev.map((e) => e.id === empresaAsignando.id ? { ...e, asignado_a: agenteSel || null } : e)
-      );
-    }
+    if (!error) setEmpresas((prev) => prev.map((e) => e.id === empresaAsignando.id ? { ...e, asignado_a: agenteSel || null } : e));
     setEmpresaAsignando(null);
   }
 
-  // Eliminar suave
   async function confirmarEliminacionSuave() {
     if (!empresaEliminandoSuave) return;
     setProcesandoEliminacion(true);
-    const { error } = await supabase
-      .from('empresas')
-      .update({ estado_empresa: 'eliminada' })
-      .eq('id', empresaEliminandoSuave.id);
+    const { error } = await supabase.from('empresas').update({ estado_empresa: 'eliminada' }).eq('id', empresaEliminandoSuave.id);
     setProcesandoEliminacion(false);
     if (!error) {
-      if (puedeVerEliminadas) {
-        setEmpresas((prev) =>
-          prev.map((e) => e.id === empresaEliminandoSuave.id ? { ...e, estado_empresa: 'eliminada' } : e)
-        );
-      } else {
-        setEmpresas((prev) => prev.filter((e) => e.id !== empresaEliminandoSuave.id));
-      }
+      if (puedeVerEliminadas) setEmpresas((prev) => prev.map((e) => e.id === empresaEliminandoSuave.id ? { ...e, estado_empresa: 'eliminada' } : e));
+      else setEmpresas((prev) => prev.filter((e) => e.id !== empresaEliminandoSuave.id));
     }
     setEmpresaEliminandoSuave(null);
   }
 
-  // Eliminar permanente
   async function confirmarEliminacionPermanente() {
     if (!empresaEliminandoPermanente) return;
     setProcesandoEliminacionPermanente(true);
-    const { data, error } = await supabase.functions.invoke('permanently-delete-empresa', {
-      body: { empresaId: empresaEliminandoPermanente.id },
-    });
+    const { data, error } = await supabase.functions.invoke('permanently-delete-empresa', { body: { empresaId: empresaEliminandoPermanente.id } });
     if (error || data?.error) {
       await supabase.from('empresas').update({ estado_empresa: 'eliminada' }).eq('id', empresaEliminandoPermanente.id);
-      const { data: data2, error: error2 } = await supabase.functions.invoke('permanently-delete-empresa', {
-        body: { empresaId: empresaEliminandoPermanente.id },
-      });
-      if (error2 || data2?.error) {
-        setProcesandoEliminacionPermanente(false);
-        setEmpresaEliminandoPermanente(null);
-        setTextoConfirmacion('');
-        return;
-      }
+      const { data: d2, error: e2 } = await supabase.functions.invoke('permanently-delete-empresa', { body: { empresaId: empresaEliminandoPermanente.id } });
+      if (e2 || d2?.error) { setProcesandoEliminacionPermanente(false); setEmpresaEliminandoPermanente(null); setTextoConfirmacion(''); return; }
     }
     setProcesandoEliminacionPermanente(false);
     setEmpresas((prev) => prev.filter((e) => e.id !== empresaEliminandoPermanente.id));
@@ -381,56 +310,74 @@ export default function Empresas() {
         {empresas.length} empresas registradas en Runa
       </Typography>
 
-      <TextField
-        fullWidth
-        placeholder="Buscar por RUT, Empkey o nombre de empresa"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        sx={{ mb: 4, maxWidth: 480, bgcolor: 'background.paper' }}
-        slotProps={{
-          input: {
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon sx={{ fontSize: 19, color: 'text.disabled' }} />
-              </InputAdornment>
-            ),
-          },
-        }}
-      />
+      {/* Barra de búsqueda + filtro rápido */}
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+        <TextField
+          placeholder="Buscar por RUT, Empkey o nombre de empresa"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          sx={{ maxWidth: 420, flexGrow: 1, bgcolor: 'background.paper' }}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: 19, color: 'text.disabled' }} />
+                </InputAdornment>
+              ),
+            },
+          }}
+        />
+        {/* Filtro rápido "Solo las mías" */}
+        <Tooltip title={soloMias ? 'Ver todas las empresas' : 'Ver solo mis borradores asignados'}>
+          <ToggleButton
+            value="soloMias"
+            selected={soloMias}
+            onChange={() => { setSoloMias((v) => !v); limpiarSeleccion(); }}
+            size="small"
+            sx={{
+              gap: 0.8, px: 1.5, fontSize: 12.5, fontWeight: 600, textTransform: 'none',
+              borderColor: soloMias ? 'primary.main' : 'divider',
+              color: soloMias ? 'primary.main' : 'text.secondary',
+              bgcolor: soloMias ? 'rgba(122,107,176,0.08)' : 'background.paper',
+              '&.Mui-selected': { bgcolor: 'rgba(122,107,176,0.08)', color: 'primary.main' },
+              '&.Mui-selected:hover': { bgcolor: 'rgba(122,107,176,0.12)' },
+            }}
+          >
+            <PersonOutlinedIcon sx={{ fontSize: 17 }} />
+            Mis empresas
+            {misEmpresas.length > 0 && (
+              <Chip
+                label={misEmpresas.length}
+                size="small"
+                sx={{ height: 18, fontSize: 10.5, fontWeight: 700, ml: 0.5,
+                  bgcolor: soloMias ? 'primary.main' : 'rgba(122,107,176,0.15)',
+                  color: soloMias ? '#fff' : 'primary.main' }}
+              />
+            )}
+          </ToggleButton>
+        </Tooltip>
+      </Box>
 
-      {/* Barra de selección masiva — aparece solo cuando hay borradores y puedeAsignar */}
-      {puedeAsignar && borradores.length > 0 && (
+      {/* Barra de asignación masiva */}
+      {puedeAsignar && borradores.length > 0 && !soloMias && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
           {modoSeleccion ? (
             <>
-              <Chip
-                label={`${seleccionadas.size} seleccionada${seleccionadas.size !== 1 ? 's' : ''}`}
-                size="small"
-                sx={{ bgcolor: 'rgba(122,107,176,0.12)', color: 'primary.main', fontWeight: 700 }}
-              />
-              <Button
-                size="small"
-                startIcon={<GroupAddOutlinedIcon />}
-                variant="contained"
-                onClick={() => { setAgenteMasivo(''); setDialogoAsignacionMasiva(true); }}
-              >
+              <Chip label={`${seleccionadas.size} seleccionada${seleccionadas.size !== 1 ? 's' : ''}`} size="small"
+                sx={{ bgcolor: 'rgba(122,107,176,0.12)', color: 'primary.main', fontWeight: 700 }} />
+              <Button size="small" startIcon={<GroupAddOutlinedIcon />} variant="contained"
+                onClick={() => { setAgenteMasivo(''); setDialogoAsignacionMasiva(true); }}>
                 Asignar seleccionadas
               </Button>
               <Button size="small" onClick={seleccionarTodosBorradores} sx={{ color: 'text.secondary' }}>
                 Seleccionar todos ({borradores.length})
               </Button>
-              <Button size="small" onClick={limpiarSeleccion} sx={{ color: 'text.secondary' }}>
-                Cancelar
-              </Button>
+              <Button size="small" onClick={limpiarSeleccion} sx={{ color: 'text.secondary' }}>Cancelar</Button>
             </>
           ) : (
-            <Button
-              size="small"
-              startIcon={<GroupAddOutlinedIcon />}
-              variant="outlined"
+            <Button size="small" startIcon={<GroupAddOutlinedIcon />} variant="outlined"
               onClick={seleccionarTodosBorradores}
-              sx={{ color: 'text.secondary', borderColor: 'divider' }}
-            >
+              sx={{ color: 'text.secondary', borderColor: 'divider' }}>
               Asignación masiva
             </Button>
           )}
@@ -440,6 +387,10 @@ export default function Empresas() {
       {cargando ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress sx={{ color: 'primary.main' }} />
+        </Box>
+      ) : soloMias && misEmpresas.length === 0 ? (
+        <Box sx={{ textAlign: 'center', py: 8 }}>
+          <Typography sx={{ color: 'text.secondary' }}>No tienes borradores asignados.</Typography>
         </Box>
       ) : resultados.length === 0 ? (
         <Typography sx={{ color: 'text.secondary', textAlign: 'center', py: 8 }}>
@@ -461,11 +412,8 @@ export default function Empresas() {
                 {items.map((empresa) => (
                   <Grid key={empresa.id} size={{ xs: 12, sm: 6, md: 4 }}>
                     <CardEmpresa
-                      empresa={empresa}
-                      onClick={() => irAEmpresa(empresa)}
-                      puedeAsignar={puedeAsignar}
-                      esAdmin={esAdmin}
-                      agentes={agentes}
+                      empresa={empresa} onClick={() => irAEmpresa(empresa)}
+                      puedeAsignar={puedeAsignar} esAdmin={esAdmin} agentes={agentes}
                       onAsignar={abrirDialogoAsignacion}
                       onEliminarSuave={setEmpresaEliminandoSuave}
                       onEliminarPermanente={(e) => { setEmpresaEliminandoPermanente(e); setTextoConfirmacion(''); }}
@@ -483,23 +431,19 @@ export default function Empresas() {
 
       {/* Diálogo: Asignación masiva */}
       <Dialog open={dialogoAsignacionMasiva} onClose={() => setDialogoAsignacionMasiva(false)} fullWidth maxWidth="xs">
-        <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>Asignar agente a {seleccionadas.size} empresa{seleccionadas.size !== 1 ? 's' : ''}</DialogTitle>
+        <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>
+          Asignar agente a {seleccionadas.size} empresa{seleccionadas.size !== 1 ? 's' : ''}
+        </DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 2 }}>
             Todas las empresas seleccionadas quedarán asignadas al mismo agente.
           </Typography>
           <FormControl fullWidth size="small">
-            <InputLabel>Agente asignado</InputLabel>
-            <Select
-              value={agenteMasivo}
-              label="Agente asignado"
-              onChange={(e) => setAgenteMasivo(e.target.value)}
-            >
+            <InputLabel>Asignar a</InputLabel>
+            <Select value={agenteMasivo} label="Asignar a" onChange={(e) => setAgenteMasivo(e.target.value)}>
               <MenuItem value=""><em>Sin asignar</em></MenuItem>
               {agentes.map((a) => (
-                <MenuItem key={a.id} value={a.id}>
-                  {a.nombre_completo || a.correo}
-                </MenuItem>
+                <MenuItem key={a.id} value={a.id}>{a.nombre_completo || a.correo}</MenuItem>
               ))}
             </Select>
           </FormControl>
@@ -512,32 +456,25 @@ export default function Empresas() {
         </DialogActions>
       </Dialog>
 
-      {/* Diálogo: Asignar agente individual */}
+      {/* Diálogo: Asignar individual */}
       <Dialog open={!!empresaAsignando} onClose={() => setEmpresaAsignando(null)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>Asignar agente</DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 2 }}>
-            Elige quién estará a cargo de completar el registro de{' '}
-            <strong>{empresaAsignando?.razon_social}</strong>.
+            Elige quién estará a cargo de completar el registro de <strong>{empresaAsignando?.razon_social}</strong>.
           </Typography>
           <FormControl fullWidth size="small">
-            <InputLabel>Agente asignado</InputLabel>
-            <Select
-              value={agenteSel}
-              label="Agente asignado"
-              onChange={(e) => setAgenteSel(e.target.value)}
-            >
+            <InputLabel>Asignar a</InputLabel>
+            <Select value={agenteSel} label="Asignar a" onChange={(e) => setAgenteSel(e.target.value)}>
               <MenuItem value=""><em>Sin asignar</em></MenuItem>
               {agentes.map((a) => (
-                <MenuItem key={a.id} value={a.id}>
-                  {a.nombre_completo || a.correo}
-                </MenuItem>
+                <MenuItem key={a.id} value={a.id}>{a.nombre_completo || a.correo}</MenuItem>
               ))}
             </Select>
           </FormControl>
           {empresaAsignando?.asignado_a && (
             <Typography sx={{ fontSize: 11, color: 'text.disabled', mt: 1 }}>
-              Actualmente asignado a: {nombreAgente(empresaAsignando.asignado_a)}
+              Actualmente: {nombreAgente(empresaAsignando.asignado_a)}
             </Typography>
           )}
         </DialogContent>
@@ -575,21 +512,16 @@ export default function Empresas() {
           <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 1 }}>
             Escribe <strong>{empresaEliminandoPermanente?.razon_social}</strong> para confirmar:
           </Typography>
-          <TextField
-            fullWidth size="small" autoFocus
-            value={textoConfirmacion}
+          <TextField fullWidth size="small" autoFocus value={textoConfirmacion}
             onChange={(e) => setTextoConfirmacion(e.target.value)}
-            placeholder={empresaEliminandoPermanente?.razon_social}
-          />
+            placeholder={empresaEliminandoPermanente?.razon_social} />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           <Button onClick={() => setEmpresaEliminandoPermanente(null)} sx={{ color: 'text.secondary' }}>Cancelar</Button>
           <Button
             onClick={confirmarEliminacionPermanente}
             disabled={procesandoEliminacionPermanente || textoConfirmacion.trim() !== empresaEliminandoPermanente?.razon_social}
-            variant="contained"
-            color="error"
-          >
+            variant="contained" color="error">
             {procesandoEliminacionPermanente ? 'Eliminando...' : 'Eliminar permanentemente'}
           </Button>
         </DialogActions>
