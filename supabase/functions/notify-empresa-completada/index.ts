@@ -74,7 +74,7 @@ function plantillaEmpresaCompletada({
           </tr>
         </table>
 
-        <p style="font-size:11px; color:#9C93B5; margin-top:20px;">Runa — Panel SAC</p>
+        <p style="font-size:11px; color:#9C93B5; margin-top:20px;">Runa</p>
       </td>
     </tr>
   </table>
@@ -169,9 +169,9 @@ Deno.serve(async (req) => {
 
     for (const correo of correosAdmins) {
       await client.send({
-        from: `Runa <${Deno.env.get('GMAIL_FROM') ?? Deno.env.get('GMAIL_USER')}>`,
+        from: `Runa <${Deno.env.get('GMAIL_USER')}>`,
         to: correo,
-        subject: `Empresa completada: ${razonSocial}`,
+        subject: `=?utf-8?B?${btoa(unescape(encodeURIComponent(`Empresa completada: ${razonSocial}`)))}?=`,
         html,
       });
     }
