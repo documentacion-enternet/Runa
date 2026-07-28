@@ -32,9 +32,9 @@ type Agente = {
 
 type StatsAgente = {
   agente: Agente;
-  asignadas: number;       // borradores asignados a él
-  completadas: number;     // empresas completadas por él
-  pendientes: number;      // asignadas pero aún borrador
+  asignadas: number;
+  completadas: number;
+  pendientes: number;
 };
 
 const RANGOS = [
@@ -54,9 +54,7 @@ function fechaDesde(rango: string): string | null {
   return null;
 }
 
-function KpiCard({
-  titulo, valor, icono, color, subtitulo,
-}: {
+function KpiCard({ titulo, valor, icono, color, subtitulo }: {
   titulo: string; valor: number; icono: React.ReactNode; color: string; subtitulo?: string;
 }) {
   return (
@@ -95,18 +93,31 @@ function BarraProgreso({ valor, total, color }: { valor: number; total: number; 
   );
 }
 
+const ETIQUETA_ROL: Record<string, string> = {
+  admin: 'Admin',
+  lider: 'Líder',
+  agente: 'Agente',
+  vista: 'Vista',
+};
+
+const COLOR_ROL: Record<string, { bg: string; color: string }> = {
+  admin:  { bg: 'rgba(122,107,176,0.12)', color: '#695A9E' },
+  lider:  { bg: 'rgba(91,78,130,0.12)',   color: '#5B4E82' },
+  agente: { bg: 'rgba(94,156,122,0.12)',  color: '#4C8467' },
+  vista:  { bg: 'rgba(183,155,133,0.15)', color: '#8A6E55' },
+};
+
 export default function Dashboard() {
   const [cargando, setCargando] = useState(true);
   const [rango, setRango] = useState('all');
   const [empresas, setEmpresas] = useState<EmpresaRaw[]>([]);
-  const [agentes, setAgentes] = useState<Agente[]>([]);
+  const [perfiles, setPerfiles] = useState<Agente[]>([]);
 
   useEffect(() => {
     async function cargar() {
       setCargando(true);
       const desde = fechaDesde(rango);
 
-      // Traer todas las empresas (admin ve todo por RLS)
       let query = supabase
         .from('empresas')
         .select('id, estado_empresa, completado, asignado_a, creado_en:created_at, completado_en, completado_por');
@@ -116,20 +127,19 @@ export default function Dashboard() {
       const { data: empData } = await query;
       setEmpresas((empData as EmpresaRaw[]) ?? []);
 
-      // Traer agentes y líderes (quienes pueden completar empresas)
-      const { data: agentesData } = await supabase
+      // Todos los perfiles — incluye admin, lider, agente, vista
+      const { data: perfilesData } = await supabase
         .from('perfiles')
         .select('id, nombre_completo, correo, rol')
-        .in('rol', ['agente', 'lider'])
         .order('nombre_completo', { ascending: true });
 
-      setAgentes((agentesData as Agente[]) ?? []);
+      setPerfiles((perfilesData as Agente[]) ?? []);
       setCargando(false);
     }
     cargar();
   }, [rango]);
 
-  // --- Cálculos ---
+  // --- Cálculos generales ---
   const total = empresas.length;
   const activas = empresas.filter((e) => e.completado && e.estado_empresa === 'activa').length;
   const caducadas = empresas.filter((e) => e.completado && e.estado_empresa === 'caducada').length;
@@ -138,14 +148,18 @@ export default function Dashboard() {
   const borradoresSinAsignar = empresas.filter((e) => !e.completado && !e.asignado_a).length;
   const borradoresAsignados = empresas.filter((e) => !e.completado && e.asignado_a).length;
 
-  const statsAgentes: StatsAgente[] = agentes.map((agente) => {
-    const asignadas = empresas.filter((e) => !e.completado && e.asignado_a === agente.id).length;
-    const completadas = empresas.filter((e) => e.completado && e.completado_por === agente.id).length;
-    const pendientes = asignadas; // borradores asignados a él aún no completados
-    return { agente, asignadas, completadas, pendientes };
-  }).sort((a, b) => b.completadas - a.completadas);
-
-  const maxCompletadas = Math.max(...statsAgentes.map((s) => s.completadas), 1);
+  // --- Stats por perfil ---
+  // Solo mostrar perfiles que tienen al menos alguna asignación o completada,
+  // o que tienen rol que puede trabajar con empresas (excluir vista sin actividad)
+  const statsPerfiles: StatsAgente[] = perfiles
+    .map((perfil) => {
+      const asignadas = empresas.filter((e) => !e.completado && e.asignado_a === perfil.id).length;
+      const completadas = empresas.filter((e) => e.completado && e.completado_por === perfil.id).length;
+      const pendientes = asignadas;
+      return { agente: perfil, asignadas, completadas, pendientes };
+    })
+    .filter((s) => s.asignadas > 0 || s.completadas > 0) // solo mostrar quien tiene actividad
+    .sort((a, b) => b.completadas - a.completadas || b.asignadas - a.asignadas);
 
   return (
     <Box sx={{ maxWidth: 1100, mx: 'auto', px: 4, py: 4 }}>
@@ -181,7 +195,8 @@ export default function Dashboard() {
               <KpiCard titulo="Total empresas" valor={total} color="#7A6BB0" icono={<BusinessOutlinedIcon fontSize="inherit" />} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <KpiCard titulo="Activas" valor={activas} color="#5E9C7C" icono={<CheckCircleOutlineIcon fontSize="inherit" />} subtitulo={`${total > 0 ? Math.round((activas / total) * 100) : 0}% del total`} />
+              <KpiCard titulo="Activas" valor={activas} color="#5E9C7C" icono={<CheckCircleOutlineIcon fontSize="inherit" />}
+                subtitulo={`${total > 0 ? Math.round((activas / total) * 100) : 0}% del total`} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <KpiCard titulo="Caducadas" valor={caducadas} color="#C9A15A" icono={<EventBusyOutlinedIcon fontSize="inherit" />} />
@@ -200,44 +215,35 @@ export default function Dashboard() {
               <KpiCard titulo="Total borradores" valor={borradores} color="#B79B85" icono={<EditNoteOutlinedIcon fontSize="inherit" />} />
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
-              <KpiCard
-                titulo="Asignados"
-                valor={borradoresAsignados}
-                color="#7A6BB0"
+              <KpiCard titulo="Asignados" valor={borradoresAsignados} color="#7A6BB0"
                 icono={<AssignmentIndOutlinedIcon fontSize="inherit" />}
-                subtitulo={`${borradores > 0 ? Math.round((borradoresAsignados / borradores) * 100) : 0}% de los borradores`}
-              />
+                subtitulo={`${borradores > 0 ? Math.round((borradoresAsignados / borradores) * 100) : 0}% de los borradores`} />
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
-              <KpiCard
-                titulo="Sin asignar"
-                valor={borradoresSinAsignar}
-                color="#C9A15A"
+              <KpiCard titulo="Sin asignar" valor={borradoresSinAsignar} color="#C9A15A"
                 icono={<HourglassEmptyOutlinedIcon fontSize="inherit" />}
-                subtitulo={borradoresSinAsignar > 0 ? 'Pendientes de asignar' : 'Todo asignado ✓'}
-              />
+                subtitulo={borradoresSinAsignar > 0 ? 'Pendientes de asignar' : 'Todo asignado ✓'} />
             </Grid>
           </Grid>
 
-          {/* Por agente */}
-          {statsAgentes.length > 0 && (
+          {/* Por perfil */}
+          {statsPerfiles.length > 0 && (
             <>
               <Typography sx={{ fontSize: 11, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.04em', mb: 1.5 }}>
-                Por agente
+                Por usuario
               </Typography>
               <Card sx={{ overflow: 'hidden' }}>
-                {/* Header */}
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 100px 180px', px: 2.5, py: 1, bgcolor: '#FAF8FD', borderBottom: '1px solid #EAE5F5' }}>
-                  {['Agente', 'Asignadas', 'Completadas', 'Pendientes', 'Progreso'].map((h) => (
+                  {['Usuario', 'Asignadas', 'Completadas', 'Pendientes', 'Progreso'].map((h) => (
                     <Typography key={h} sx={{ fontSize: 10, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                       {h}
                     </Typography>
                   ))}
                 </Box>
-                {statsAgentes.map((s, i) => (
+                {statsPerfiles.map((s, i) => (
                   <Box key={s.agente.id}>
                     <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 100px 180px', px: 2.5, py: 1.6, alignItems: 'center' }}>
-                      {/* Agente */}
+                      {/* Usuario */}
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, minWidth: 0 }}>
                         <Avatar sx={{ width: 30, height: 30, bgcolor: 'primary.main', fontSize: 11, fontWeight: 700 }}>
                           {(s.agente.nombre_completo || s.agente.correo || '?').slice(0, 2).toUpperCase()}
@@ -247,12 +253,12 @@ export default function Dashboard() {
                             {s.agente.nombre_completo || s.agente.correo}
                           </Typography>
                           <Chip
-                            label={s.agente.rol === 'lider' ? 'Líder' : 'Agente'}
+                            label={ETIQUETA_ROL[s.agente.rol] ?? s.agente.rol}
                             size="small"
                             sx={{
                               height: 16, fontSize: 9.5, fontWeight: 700,
-                              bgcolor: s.agente.rol === 'lider' ? 'rgba(91,78,130,0.12)' : 'rgba(94,156,122,0.12)',
-                              color: s.agente.rol === 'lider' ? '#5B4E82' : '#4C8467',
+                              bgcolor: COLOR_ROL[s.agente.rol]?.bg ?? 'rgba(139,132,163,0.12)',
+                              color: COLOR_ROL[s.agente.rol]?.color ?? 'text.secondary',
                             }}
                           />
                         </Box>
@@ -269,19 +275,26 @@ export default function Dashboard() {
                       <Typography sx={{ fontFamily: MONO_FONT, fontSize: 13.5, fontWeight: 700, color: s.pendientes > 0 ? '#C9A15A' : 'text.disabled' }}>
                         {s.pendientes}
                       </Typography>
-                      {/* Barra de progreso relativa al que más completó */}
-                      <BarraProgreso valor={s.completadas} total={maxCompletadas} color="#5E9C7C" />
+                      {/* Barra de progreso: completadas sobre (asignadas + completadas) del mismo usuario */}
+                      <BarraProgreso
+                        valor={s.completadas}
+                        total={s.asignadas + s.completadas}
+                        color="#5E9C7C"
+                      />
                     </Box>
-                    {i < statsAgentes.length - 1 && <Divider />}
+                    {i < statsPerfiles.length - 1 && <Divider />}
                   </Box>
                 ))}
-                {statsAgentes.every((s) => s.completadas === 0 && s.asignadas === 0) && (
-                  <Typography sx={{ fontSize: 13, color: 'text.disabled', textAlign: 'center', py: 4 }}>
-                    Sin actividad en el período seleccionado.
-                  </Typography>
-                )}
               </Card>
             </>
+          )}
+
+          {statsPerfiles.length === 0 && (
+            <Card sx={{ p: 4, textAlign: 'center' }}>
+              <Typography sx={{ fontSize: 13, color: 'text.disabled' }}>
+                Sin actividad registrada en el período seleccionado.
+              </Typography>
+            </Card>
           )}
         </>
       )}
