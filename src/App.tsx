@@ -35,8 +35,9 @@ function App() {
             <Route path="/importar-csv" element={
               <ProtectedRouteAdmin><ImportarCsv /></ProtectedRouteAdmin>
             } />
+            {/* Dashboard: admin y lider */}
             <Route path="/dashboard" element={
-              <ProtectedRouteAdmin><Dashboard /></ProtectedRouteAdmin>
+              <ProtectedRouteGestores><Dashboard /></ProtectedRouteGestores>
             } />
           </Route>
         </Routes>

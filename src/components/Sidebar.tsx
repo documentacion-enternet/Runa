@@ -40,7 +40,6 @@ export function Sidebar() {
   const [guardandoContrasena, setGuardandoContrasena] = useState(false);
   const [countMisEmpresas, setCountMisEmpresas] = useStateCount(0);
 
-  // Contar borradores asignados al usuario para el badge
   useEffect(() => {
     if (!session?.user.id) return;
     supabase
@@ -92,6 +91,8 @@ export function Sidebar() {
     ...(puedeGestionar ? [{ label: 'Gestión de Usuarios', path: '/gestion-usuarios', icon: <PeopleOutlinedIcon fontSize="small" /> }] : []),
     ...(esAdmin ? [
       { label: 'Importar CSV', path: '/importar-csv', icon: <UploadFileOutlinedIcon fontSize="small" /> },
+    ] : []),
+    ...(puedeGestionar ? [
       { label: 'Dashboard', path: '/dashboard', icon: <DashboardOutlinedIcon fontSize="small" /> },
     ] : []),
   ];
