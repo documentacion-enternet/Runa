@@ -9,6 +9,7 @@ import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import GroupAddOutlinedIcon from '@mui/icons-material/GroupAddOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -91,6 +92,9 @@ export function Sidebar() {
     ...(puedeGestionar ? [{ label: 'Gestión de Usuarios', path: '/gestion-usuarios', icon: <PeopleOutlinedIcon fontSize="small" /> }] : []),
     ...(esAdmin ? [
       { label: 'Importar CSV', path: '/importar-csv', icon: <UploadFileOutlinedIcon fontSize="small" /> },
+    ] : []),
+    ...(puedeGestionar ? [
+      { label: 'Importar usuarios', path: '/importar-usuarios-csv', icon: <GroupAddOutlinedIcon fontSize="small" /> },
     ] : []),
     ...(puedeGestionar ? [
       { label: 'Dashboard', path: '/dashboard', icon: <DashboardOutlinedIcon fontSize="small" /> },

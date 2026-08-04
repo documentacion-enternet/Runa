@@ -8,6 +8,7 @@ import FichaEmpresa from './pages/FichaEmpresa';
 import FormularioInscripcion from './pages/FormularioInscripcion';
 import GestionUsuarios from './pages/GestionUsuarios';
 import ImportarCsv from './pages/ImportarCsv';
+import ImportarUsuariosCsv from './pages/ImportarUsuariosCsv';
 import Dashboard from './pages/Dashboard';
 import MisEmpresas from './pages/MisEmpresas';
 import DefinirContrasena from './pages/DefinirContrasena';
@@ -34,6 +35,10 @@ function App() {
             } />
             <Route path="/importar-csv" element={
               <ProtectedRouteAdmin><ImportarCsv /></ProtectedRouteAdmin>
+            } />
+            {/* Importar usuarios activos: admin y lider */}
+            <Route path="/importar-usuarios-csv" element={
+              <ProtectedRouteGestores><ImportarUsuariosCsv /></ProtectedRouteGestores>
             } />
             {/* Dashboard: admin y lider */}
             <Route path="/dashboard" element={
