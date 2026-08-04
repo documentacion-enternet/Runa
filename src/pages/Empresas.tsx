@@ -4,7 +4,7 @@ import {
   Box, Typography, TextField, InputAdornment, Grid, Card, Avatar,
   CircularProgress, IconButton, Dialog, DialogTitle, DialogContent,
   DialogActions, Button, MenuItem, Select, FormControl, InputLabel, Tooltip,
-  Checkbox, Chip, ToggleButton,
+  Checkbox, Chip, ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
@@ -16,6 +16,8 @@ import { supabase } from '../lib/supabaseClient';
 import { MONO_FONT } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 
+// ─── Tipos ────────────────────────────────────────────────────────────────────
+
 type Empresa = {
   id: string;
   empkey: number;
@@ -25,6 +27,9 @@ type Empresa = {
   completado: boolean;
   estado_empresa: 'activa' | 'caducada' | 'eliminada';
   asignado_a: string | null;
+  _contactos: number;
+  _usuarios: number;
+  _servicios: number;
 };
 
 type AgentePerfil = {
@@ -33,6 +38,11 @@ type AgentePerfil = {
   correo: string | null;
 };
 
+type FiltroEtapaValor = 'sin_contactos' | 'sin_usuarios' | 'sin_servicios' | 'listos';
+type FiltroEtapa = FiltroEtapaValor | null;
+
+// ─── Helpers visuales ─────────────────────────────────────────────────────────
+
 const AVATAR_COLORS = [
   '#7A6BB0', '#5E9C7C', '#B79B85', '#5B4E82',
   '#C9A15A', '#8B84A3', '#6B8CA3',
@@ -40,20 +50,58 @@ const AVATAR_COLORS = [
 
 function colorParaEmpresa(id: string) {
   let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = id.charCodeAt(i) + ((hash << 5) - hash);
-  }
+  for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-function iniciales(nombre: string) {
-  return nombre.slice(0, 2).toUpperCase();
-}
+function iniciales(nombre: string) { return nombre.slice(0, 2).toUpperCase(); }
 
 function grupoDeEmpresa(e: Empresa): 'borrador' | 'activa' | 'caducada' | 'eliminada' {
   if (!e.completado) return 'borrador';
   return e.estado_empresa;
 }
+
+// ─── Barra de 4 segmentos de etapas ──────────────────────────────────────────
+
+const ETAPAS = [
+  { key: 'datos',     label: 'Datos',     color: '#7A6BB0' },
+  { key: 'contactos', label: 'Contactos', color: '#5E9C7C' },
+  { key: 'usuarios',  label: 'Usuarios',  color: '#5B4E82' },
+  { key: 'servicios', label: 'Servicios', color: '#B79B85' },
+];
+
+function ProgresoEtapas({ empresa }: { empresa: Empresa }) {
+  const etapasOk = [
+    true,
+    empresa._contactos > 0,
+    empresa._usuarios > 0,
+    empresa._servicios > 0,
+  ];
+  const completadas = etapasOk.filter(Boolean).length;
+  const tooltipTexto = ETAPAS.map((e, i) => `${etapasOk[i] ? '✓' : '○'} ${e.label}`).join('  ');
+
+  return (
+    <Tooltip title={tooltipTexto} placement="top" arrow>
+      <Box sx={{ mt: 1 }}>
+        <Box sx={{ display: 'flex', gap: '2px', height: 4, borderRadius: 999, overflow: 'hidden' }}>
+          {ETAPAS.map((etapa, i) => (
+            <Box key={etapa.key} sx={{
+              flex: 1,
+              bgcolor: etapasOk[i] ? etapa.color : '#EAE5F5',
+              borderRadius: 999,
+              transition: 'background-color 0.2s',
+            }} />
+          ))}
+        </Box>
+        <Typography sx={{ fontSize: 10, color: 'text.disabled', mt: 0.4 }}>
+          {completadas === 4 ? 'Lista para completar' : `${completadas}/4 etapas`}
+        </Typography>
+      </Box>
+    </Tooltip>
+  );
+}
+
+// ─── Card empresa ─────────────────────────────────────────────────────────────
 
 function CardEmpresa({
   empresa, onClick, puedeAsignar, esAdmin, agentes,
@@ -71,7 +119,7 @@ function CardEmpresa({
     <Card
       onClick={() => modoSeleccion && esBorrador ? onToggleSeleccion(empresa) : onClick()}
       sx={{
-        p: 2.2, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 1.5,
+        p: 2.2, cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 1.5,
         opacity: empresa.estado_empresa !== 'activa' ? 0.7 : 1,
         transition: 'border-color 0.15s, box-shadow 0.15s',
         '&:hover': { borderColor: 'primary.main' },
@@ -79,13 +127,12 @@ function CardEmpresa({
       }}
     >
       {esBorrador && puedeAsignar && (
-        <Checkbox
-          size="small" checked={seleccionada}
+        <Checkbox size="small" checked={seleccionada}
           onClick={(e) => { e.stopPropagation(); onToggleSeleccion(empresa); }}
-          sx={{ p: 0, flexShrink: 0, color: 'text.disabled', '&.Mui-checked': { color: 'primary.main' } }}
+          sx={{ p: 0, flexShrink: 0, color: 'text.disabled', '&.Mui-checked': { color: 'primary.main' }, mt: 0.3 }}
         />
       )}
-      <Avatar sx={{ bgcolor: colorParaEmpresa(empresa.id), width: 42, height: 42, fontWeight: 700, fontSize: 14 }}>
+      <Avatar sx={{ bgcolor: colorParaEmpresa(empresa.id), width: 42, height: 42, fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
         {iniciales(empresa.nombre_fantasia || empresa.razon_social)}
       </Avatar>
       <Box sx={{ minWidth: 0, flexGrow: 1 }}>
@@ -99,11 +146,14 @@ function CardEmpresa({
           <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>· Empkey {empresa.empkey}</Typography>
         </Box>
         {esBorrador && (
-          <Typography sx={{ fontSize: 10.5, color: empresa.asignado_a ? 'primary.main' : 'text.disabled', mt: 0.3 }}>
-            {empresa.asignado_a
-              ? `Asignado a ${agentes.find((a) => a.id === empresa.asignado_a)?.nombre_completo ?? agentes.find((a) => a.id === empresa.asignado_a)?.correo ?? '…'}`
-              : 'Sin asignar'}
-          </Typography>
+          <>
+            <Typography sx={{ fontSize: 10.5, color: empresa.asignado_a ? 'primary.main' : 'text.disabled', mt: 0.3 }}>
+              {empresa.asignado_a
+                ? `Asignado a ${agentes.find((a) => a.id === empresa.asignado_a)?.nombre_completo ?? agentes.find((a) => a.id === empresa.asignado_a)?.correo ?? '…'}`
+                : 'Sin asignar'}
+            </Typography>
+            <ProgresoEtapas empresa={empresa} />
+          </>
         )}
       </Box>
       {esBorrador && !modoSeleccion && (
@@ -136,11 +186,32 @@ function CardEmpresa({
   );
 }
 
+// ─── Filtros de etapa ─────────────────────────────────────────────────────────
+
+const FILTROS_ETAPA: { value: FiltroEtapaValor; label: string; color: string }[] = [
+  { value: 'sin_contactos', label: 'Sin contactos', color: '#5E9C7C' },
+  { value: 'sin_usuarios',  label: 'Sin usuarios',  color: '#5B4E82' },
+  { value: 'sin_servicios', label: 'Sin servicios', color: '#B79B85' },
+  { value: 'listos',        label: 'Listos ✓',      color: '#7A6BB0' },
+];
+
+function aplicarFiltroEtapa(empresas: Empresa[], filtro: FiltroEtapa): Empresa[] {
+  if (!filtro) return empresas;
+  if (filtro === 'sin_contactos') return empresas.filter((e) => e._contactos === 0);
+  if (filtro === 'sin_usuarios')  return empresas.filter((e) => e._usuarios === 0);
+  if (filtro === 'sin_servicios') return empresas.filter((e) => e._servicios === 0);
+  if (filtro === 'listos')        return empresas.filter((e) => e._contactos > 0 && e._usuarios > 0 && e._servicios > 0);
+  return empresas;
+}
+
+// ─── Página principal ─────────────────────────────────────────────────────────
+
 export default function Empresas() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [cargando, setCargando] = useState(true);
   const [query, setQuery] = useState('');
   const [soloMias, setSoloMias] = useState(false);
+  const [filtroEtapa, setFiltroEtapa] = useState<FiltroEtapa>(null);
   const [agentes, setAgentes] = useState<AgentePerfil[]>([]);
 
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
@@ -168,7 +239,7 @@ export default function Empresas() {
   const modoSeleccion = seleccionadas.size > 0;
 
   const SECCIONES: { key: 'activa' | 'borrador' | 'caducada' | 'eliminada'; titulo: string; color: string }[] = [
-    { key: 'activa', titulo: 'Activas', color: '#5E9C7C' },
+    { key: 'activa',   titulo: 'Activas',   color: '#5E9C7C' },
     { key: 'borrador', titulo: 'Borradores', color: '#C9A15A' },
     { key: 'caducada', titulo: 'Caducadas', color: '#B7791F' },
     ...(puedeVerEliminadas ? [{ key: 'eliminada' as const, titulo: 'Eliminadas', color: '#A85F6A' }] : []),
@@ -178,9 +249,30 @@ export default function Empresas() {
     async function fetchEmpresas() {
       const { data, error } = await supabase
         .from('empresas')
-        .select('id, empkey, rut, razon_social, nombre_fantasia, completado, estado_empresa, asignado_a')
+        .select(`
+          id, empkey, rut, razon_social, nombre_fantasia, completado, estado_empresa, asignado_a,
+          contactos(id),
+          usuarios_activos(id),
+          empresa_servicios(id)
+        `)
         .order('empkey', { ascending: true });
-      if (!error && data) setEmpresas(data);
+
+      if (!error && data) {
+        const mapeado: Empresa[] = (data as any[]).map((e) => ({
+          id: e.id,
+          empkey: e.empkey,
+          rut: e.rut,
+          razon_social: e.razon_social,
+          nombre_fantasia: e.nombre_fantasia,
+          completado: e.completado,
+          estado_empresa: e.estado_empresa,
+          asignado_a: e.asignado_a,
+          _contactos: Array.isArray(e.contactos) ? e.contactos.length : 0,
+          _usuarios: Array.isArray(e.usuarios_activos) ? e.usuarios_activos.length : 0,
+          _servicios: Array.isArray(e.empresa_servicios) ? e.empresa_servicios.length : 0,
+        }));
+        setEmpresas(mapeado);
+      }
       setCargando(false);
     }
     fetchEmpresas();
@@ -189,7 +281,6 @@ export default function Empresas() {
   useEffect(() => {
     if (!puedeAsignar) return;
     async function fetchAgentes() {
-      // Incluir todos los roles para que admin/lider también puedan asignarse empresas a sí mismos
       const { data } = await supabase
         .from('perfiles')
         .select('id, nombre_completo, correo')
@@ -201,10 +292,7 @@ export default function Empresas() {
 
   const resultados = useMemo(() => {
     let base = empresas;
-    // Filtro "solo las mías": borradores asignados al usuario logueado
-    if (soloMias && userId) {
-      base = base.filter((e) => !e.completado && e.asignado_a === userId);
-    }
+    if (soloMias && userId) base = base.filter((e) => !e.completado && e.asignado_a === userId);
     if (!query.trim()) return base;
     const q = query.toLowerCase();
     return base.filter(
@@ -216,13 +304,16 @@ export default function Empresas() {
     );
   }, [empresas, query, soloMias, userId]);
 
+  // El filtro de etapa se aplica SOLO sobre borradores, no toca activas/caducadas/eliminadas
   const grupos = useMemo(() => {
     const mapa: Record<string, Empresa[]> = { activa: [], borrador: [], caducada: [], eliminada: [] };
     for (const e of resultados) mapa[grupoDeEmpresa(e)].push(e);
+    mapa['borrador'] = aplicarFiltroEtapa(mapa['borrador'], filtroEtapa);
     return mapa;
-  }, [resultados]);
+  }, [resultados, filtroEtapa]);
 
   const borradores = grupos['borrador'] ?? [];
+  // Para el conteo del toggle "Mis empresas" usamos resultados sin filtro de etapa
   const misEmpresas = empresas.filter((e) => !e.completado && e.asignado_a === userId);
 
   function irAEmpresa(empresa: Empresa) {
@@ -238,10 +329,7 @@ export default function Empresas() {
     });
   }
 
-  function seleccionarTodosBorradores() {
-    setSeleccionadas(new Set(borradores.map((e) => e.id)));
-  }
-
+  function seleccionarTodosBorradores() { setSeleccionadas(new Set(borradores.map((e) => e.id))); }
   function limpiarSeleccion() { setSeleccionadas(new Set()); }
 
   async function guardarAsignacionMasiva() {
@@ -303,6 +391,18 @@ export default function Empresas() {
     return a?.nombre_completo || a?.correo || id;
   };
 
+  // Total de borradores SIN aplicar el filtro de etapa (para mostrar en los chips de filtro)
+  const totalBorradoresSinFiltro = useMemo(
+    () => resultados.filter((e) => grupoDeEmpresa(e) === 'borrador'),
+    [resultados]
+  );
+  const conteosFiltro = useMemo(() => ({
+    sin_contactos: totalBorradoresSinFiltro.filter((e) => e._contactos === 0).length,
+    sin_usuarios:  totalBorradoresSinFiltro.filter((e) => e._usuarios === 0).length,
+    sin_servicios: totalBorradoresSinFiltro.filter((e) => e._servicios === 0).length,
+    listos:        totalBorradoresSinFiltro.filter((e) => e._contactos > 0 && e._usuarios > 0 && e._servicios > 0).length,
+  }), [totalBorradoresSinFiltro]);
+
   return (
     <Box sx={{ maxWidth: 1100, mx: 'auto', px: 4, py: 4 }}>
       <Typography variant="h5" sx={{ mb: 0.5 }}>Empresas</Typography>
@@ -327,12 +427,10 @@ export default function Empresas() {
             },
           }}
         />
-        {/* Filtro rápido "Solo las mías" */}
         <Tooltip title={soloMias ? 'Ver todas las empresas' : 'Ver solo mis borradores asignados'}>
           <ToggleButton
-            value="soloMias"
-            selected={soloMias}
-            onChange={() => { setSoloMias((v) => !v); limpiarSeleccion(); }}
+            value="soloMias" selected={soloMias}
+            onChange={() => { setSoloMias((v) => !v); limpiarSeleccion(); setFiltroEtapa(null); }}
             size="small"
             sx={{
               gap: 0.8, px: 1.5, fontSize: 12.5, fontWeight: 600, textTransform: 'none',
@@ -346,13 +444,10 @@ export default function Empresas() {
             <PersonOutlinedIcon sx={{ fontSize: 17 }} />
             Mis empresas
             {misEmpresas.length > 0 && (
-              <Chip
-                label={misEmpresas.length}
-                size="small"
+              <Chip label={misEmpresas.length} size="small"
                 sx={{ height: 18, fontSize: 10.5, fontWeight: 700, ml: 0.5,
                   bgcolor: soloMias ? 'primary.main' : 'rgba(122,107,176,0.15)',
-                  color: soloMias ? '#fff' : 'primary.main' }}
-              />
+                  color: soloMias ? '#fff' : 'primary.main' }} />
             )}
           </ToggleButton>
         </Tooltip>
@@ -399,37 +494,98 @@ export default function Empresas() {
       ) : (
         SECCIONES.map(({ key, titulo, color }) => {
           const items = grupos[key];
-          if (items.length === 0) return null;
+          const esBorrador = key === 'borrador';
+
+          // Para borradores usamos el total SIN filtro de etapa para el encabezado
+          const totalParaTitulo = esBorrador ? totalBorradoresSinFiltro.length : items.length;
+          if (!esBorrador && items.length === 0) return null;
+
           return (
             <Box key={key} sx={{ mb: 4 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                <Box sx={{ width: 7, height: 7, borderRadius: '999px', bgcolor: color }} />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
+                <Box sx={{ width: 7, height: 7, borderRadius: '999px', bgcolor: color, flexShrink: 0 }} />
                 <Typography sx={{ fontSize: 12, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  {titulo} ({items.length})
+                  {titulo} ({totalParaTitulo})
                 </Typography>
+
+                {/* Filtros de etapa — solo en sección Borradores */}
+                {esBorrador && totalParaTitulo > 0 && (
+                  <ToggleButtonGroup
+                    value={filtroEtapa ?? ''}
+                    exclusive
+                    onChange={(_, v: FiltroEtapaValor | null) => { setFiltroEtapa(v); limpiarSeleccion(); }}
+                    size="small"
+                    sx={{ ml: 1, flexWrap: 'wrap', gap: 0.5, '& .MuiToggleButtonGroup-grouped': { border: '1px solid', borderRadius: '6px !important', mx: 0 } }}
+                  >
+                    {FILTROS_ETAPA.map((f) => {
+                      const conteo = conteosFiltro[f.value as keyof typeof conteosFiltro];
+                      const activo = filtroEtapa === f.value;
+                      return (
+                        <ToggleButton
+                          key={f.value} value={f.value}
+                          sx={{
+                            px: 1.2, py: 0.3, fontSize: 11, fontWeight: 600, textTransform: 'none',
+                            borderColor: activo ? f.color : 'divider',
+                            color: activo ? f.color : 'text.disabled',
+                            bgcolor: activo ? `${f.color}12` : 'background.paper',
+                            '&.Mui-selected': { bgcolor: `${f.color}12`, color: f.color, borderColor: f.color },
+                            '&.Mui-selected:hover': { bgcolor: `${f.color}20` },
+                          }}
+                        >
+                          {f.label}
+                          <Box component="span" sx={{
+                            ml: 0.6, px: 0.7, py: 0.1, borderRadius: '999px', fontSize: 10, fontWeight: 700,
+                            bgcolor: activo ? `${f.color}20` : 'rgba(0,0,0,0.05)',
+                            color: activo ? f.color : 'text.disabled',
+                          }}>
+                            {conteo}
+                          </Box>
+                        </ToggleButton>
+                      );
+                    })}
+                  </ToggleButtonGroup>
+                )}
+
+                {/* Chip indicando que hay filtro activo */}
+                {esBorrador && filtroEtapa && (
+                  <Chip
+                    label={`${items.length} resultado${items.length !== 1 ? 's' : ''}`}
+                    size="small"
+                    onDelete={() => setFiltroEtapa(null)}
+                    sx={{ fontSize: 11, height: 20, bgcolor: 'rgba(122,107,176,0.10)', color: 'primary.main' }}
+                  />
+                )}
               </Box>
-              <Grid container spacing={2}>
-                {items.map((empresa) => (
-                  <Grid key={empresa.id} size={{ xs: 12, sm: 6, md: 4 }}>
-                    <CardEmpresa
-                      empresa={empresa} onClick={() => irAEmpresa(empresa)}
-                      puedeAsignar={puedeAsignar} esAdmin={esAdmin} agentes={agentes}
-                      onAsignar={abrirDialogoAsignacion}
-                      onEliminarSuave={setEmpresaEliminandoSuave}
-                      onEliminarPermanente={(e) => { setEmpresaEliminandoPermanente(e); setTextoConfirmacion(''); }}
-                      seleccionada={seleccionadas.has(empresa.id)}
-                      onToggleSeleccion={toggleSeleccion}
-                      modoSeleccion={modoSeleccion}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
+
+              {esBorrador && items.length === 0 ? (
+                <Typography sx={{ fontSize: 13, color: 'text.disabled', py: 2 }}>
+                  No hay borradores en esta etapa.
+                </Typography>
+              ) : (
+                <Grid container spacing={2}>
+                  {items.map((empresa) => (
+                    <Grid key={empresa.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                      <CardEmpresa
+                        empresa={empresa} onClick={() => irAEmpresa(empresa)}
+                        puedeAsignar={puedeAsignar} esAdmin={esAdmin} agentes={agentes}
+                        onAsignar={abrirDialogoAsignacion}
+                        onEliminarSuave={setEmpresaEliminandoSuave}
+                        onEliminarPermanente={(e) => { setEmpresaEliminandoPermanente(e); setTextoConfirmacion(''); }}
+                        seleccionada={seleccionadas.has(empresa.id)}
+                        onToggleSeleccion={toggleSeleccion}
+                        modoSeleccion={modoSeleccion}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
             </Box>
           );
         })
       )}
 
-      {/* Diálogo: Asignación masiva */}
+      {/* ── Diálogos ── */}
+
       <Dialog open={dialogoAsignacionMasiva} onClose={() => setDialogoAsignacionMasiva(false)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>
           Asignar agente a {seleccionadas.size} empresa{seleccionadas.size !== 1 ? 's' : ''}
@@ -442,9 +598,7 @@ export default function Empresas() {
             <InputLabel>Asignar a</InputLabel>
             <Select value={agenteMasivo} label="Asignar a" onChange={(e) => setAgenteMasivo(e.target.value)}>
               <MenuItem value=""><em>Sin asignar</em></MenuItem>
-              {agentes.map((a) => (
-                <MenuItem key={a.id} value={a.id}>{a.nombre_completo || a.correo}</MenuItem>
-              ))}
+              {agentes.map((a) => <MenuItem key={a.id} value={a.id}>{a.nombre_completo || a.correo}</MenuItem>)}
             </Select>
           </FormControl>
         </DialogContent>
@@ -456,7 +610,6 @@ export default function Empresas() {
         </DialogActions>
       </Dialog>
 
-      {/* Diálogo: Asignar individual */}
       <Dialog open={!!empresaAsignando} onClose={() => setEmpresaAsignando(null)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>Asignar agente</DialogTitle>
         <DialogContent>
@@ -467,9 +620,7 @@ export default function Empresas() {
             <InputLabel>Asignar a</InputLabel>
             <Select value={agenteSel} label="Asignar a" onChange={(e) => setAgenteSel(e.target.value)}>
               <MenuItem value=""><em>Sin asignar</em></MenuItem>
-              {agentes.map((a) => (
-                <MenuItem key={a.id} value={a.id}>{a.nombre_completo || a.correo}</MenuItem>
-              ))}
+              {agentes.map((a) => <MenuItem key={a.id} value={a.id}>{a.nombre_completo || a.correo}</MenuItem>)}
             </Select>
           </FormControl>
           {empresaAsignando?.asignado_a && (
@@ -486,7 +637,6 @@ export default function Empresas() {
         </DialogActions>
       </Dialog>
 
-      {/* Diálogo: Eliminar suave */}
       <Dialog open={!!empresaEliminandoSuave} onClose={() => setEmpresaEliminandoSuave(null)}>
         <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>¿Eliminar este borrador?</DialogTitle>
         <DialogContent>
@@ -502,7 +652,6 @@ export default function Empresas() {
         </DialogActions>
       </Dialog>
 
-      {/* Diálogo: Eliminar permanente */}
       <Dialog open={!!empresaEliminandoPermanente} onClose={() => setEmpresaEliminandoPermanente(null)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontSize: 16, fontWeight: 700, color: 'error.main' }}>⚠️ Eliminar permanentemente</DialogTitle>
         <DialogContent>
@@ -518,8 +667,7 @@ export default function Empresas() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           <Button onClick={() => setEmpresaEliminandoPermanente(null)} sx={{ color: 'text.secondary' }}>Cancelar</Button>
-          <Button
-            onClick={confirmarEliminacionPermanente}
+          <Button onClick={confirmarEliminacionPermanente}
             disabled={procesandoEliminacionPermanente || textoConfirmacion.trim() !== empresaEliminandoPermanente?.razon_social}
             variant="contained" color="error">
             {procesandoEliminacionPermanente ? 'Eliminando...' : 'Eliminar permanentemente'}

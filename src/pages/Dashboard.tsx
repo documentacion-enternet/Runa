@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Card, Grid, CircularProgress, Chip,
   TextField, MenuItem, Divider, Avatar, LinearProgress,
+  Collapse, Table, TableBody, TableCell, TableHead, TableRow,
+  IconButton,
 } from '@mui/material';
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
@@ -10,8 +13,12 @@ import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import AssignmentIndOutlinedIcon from '@mui/icons-material/AssignmentIndOutlined';
 import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { supabase } from '../lib/supabaseClient';
 import { MONO_FONT } from '../theme/theme';
+
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type EmpresaRaw = {
   id: string;
@@ -21,6 +28,17 @@ type EmpresaRaw = {
   creado_en: string;
   completado_en: string | null;
   completado_por: string | null;
+};
+
+// Tipo enriquecido para borradores con conteos de etapas
+type BorradorConEtapas = {
+  id: string;
+  empkey: number;
+  razon_social: string;
+  asignado_a: string | null;
+  tiene_contactos: boolean;
+  tiene_usuarios: boolean;
+  tiene_servicios: boolean;
 };
 
 type Agente = {
@@ -36,6 +54,8 @@ type StatsAgente = {
   completadas: number;
   pendientes: number;
 };
+
+// ─── Constantes ───────────────────────────────────────────────────────────────
 
 const RANGOS = [
   { label: 'Todo el tiempo', value: 'all' },
@@ -53,6 +73,8 @@ function fechaDesde(rango: string): string | null {
   if (rango === 'year') { ahora.setMonth(0, 1); ahora.setHours(0, 0, 0, 0); return ahora.toISOString(); }
   return null;
 }
+
+// ─── Componentes reutilizables ────────────────────────────────────────────────
 
 function KpiCard({ titulo, valor, icono, color, subtitulo }: {
   titulo: string; valor: number; icono: React.ReactNode; color: string; subtitulo?: string;
@@ -93,6 +115,7 @@ function BarraProgreso({ valor, total, color }: { valor: number; total: number; 
   );
 }
 
+
 const ETIQUETA_ROL: Record<string, string> = {
   admin: 'Admin',
   lider: 'Líder',
@@ -107,50 +130,90 @@ const COLOR_ROL: Record<string, { bg: string; color: string }> = {
   vista:  { bg: 'rgba(183,155,133,0.15)', color: '#8A6E55' },
 };
 
+// ─── Página principal ─────────────────────────────────────────────────────────
+
+type EtapaDetalle = 'sin_contactos' | 'sin_usuarios' | 'sin_servicios' | 'listos' | null;
+
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [cargando, setCargando] = useState(true);
   const [rango, setRango] = useState('all');
   const [empresas, setEmpresas] = useState<EmpresaRaw[]>([]);
   const [perfiles, setPerfiles] = useState<Agente[]>([]);
+  const [borradores, setBorradores] = useState<BorradorConEtapas[]>([]);
+  const [etapaDetalle, setEtapaDetalle] = useState<EtapaDetalle>(null);
 
   useEffect(() => {
     async function cargar() {
       setCargando(true);
       const desde = fechaDesde(rango);
 
+      // Query principal de empresas (con filtro de período)
       let query = supabase
         .from('empresas')
         .select('id, estado_empresa, completado, asignado_a, creado_en:created_at, completado_en, completado_por');
-
       if (desde) query = query.gte('created_at', desde);
-
       const { data: empData } = await query;
       setEmpresas((empData as EmpresaRaw[]) ?? []);
 
-      // Todos los perfiles — incluye admin, lider, agente, vista
+      // Query de etapas para borradores — sin filtro de período para mostrar estado real actual
+      const { data: borradoresData } = await supabase
+        .from('empresas')
+        .select(`
+          id, empkey, razon_social, asignado_a,
+          contactos(id),
+          usuarios_activos(id),
+          empresa_servicios(id)
+        `)
+        .eq('completado', false)
+        .neq('estado_empresa', 'eliminada')
+        .order('empkey', { ascending: true });
+
+      if (borradoresData) {
+        setBorradores((borradoresData as any[]).map((b) => ({
+          id: b.id,
+          empkey: b.empkey,
+          razon_social: b.razon_social,
+          asignado_a: b.asignado_a,
+          tiene_contactos: Array.isArray(b.contactos) && b.contactos.length > 0,
+          tiene_usuarios: Array.isArray(b.usuarios_activos) && b.usuarios_activos.length > 0,
+          tiene_servicios: Array.isArray(b.empresa_servicios) && b.empresa_servicios.length > 0,
+        })));
+      }
+
+      // Todos los perfiles
       const { data: perfilesData } = await supabase
         .from('perfiles')
         .select('id, nombre_completo, correo, rol')
         .order('nombre_completo', { ascending: true });
-
       setPerfiles((perfilesData as Agente[]) ?? []);
+
       setCargando(false);
     }
     cargar();
   }, [rango]);
 
-  // --- Cálculos generales ---
+  // ─── Cálculos generales ───────────────────────────────────────────────────
+
   const total = empresas.length;
   const activas = empresas.filter((e) => e.completado && e.estado_empresa === 'activa').length;
   const caducadas = empresas.filter((e) => e.completado && e.estado_empresa === 'caducada').length;
   const eliminadas = empresas.filter((e) => e.estado_empresa === 'eliminada').length;
-  const borradores = empresas.filter((e) => !e.completado).length;
+  const totalBorradores = empresas.filter((e) => !e.completado).length;
   const borradoresSinAsignar = empresas.filter((e) => !e.completado && !e.asignado_a).length;
   const borradoresAsignados = empresas.filter((e) => !e.completado && e.asignado_a).length;
 
-  // --- Stats por perfil ---
-  // Solo mostrar perfiles que tienen al menos alguna asignación o completada,
-  // o que tienen rol que puede trabajar con empresas (excluir vista sin actividad)
+  // ─── Cálculos de etapas (sobre borradores actuales, sin filtro período) ──
+
+  const totalBorradoresActuales = borradores.length;
+  // Datos básicos: siempre 100% (si existe en DB, tiene rut + razon_social NOT NULL)
+  // Listos para completar = tienen las 4 etapas
+  const listosParaCompletar = borradores.filter(
+    (b) => b.tiene_contactos && b.tiene_usuarios && b.tiene_servicios
+  ).length;
+
+  // ─── Stats por perfil ─────────────────────────────────────────────────────
+
   const statsPerfiles: StatsAgente[] = perfiles
     .map((perfil) => {
       const asignadas = empresas.filter((e) => !e.completado && e.asignado_a === perfil.id).length;
@@ -158,7 +221,7 @@ export default function Dashboard() {
       const pendientes = asignadas;
       return { agente: perfil, asignadas, completadas, pendientes };
     })
-    .filter((s) => s.asignadas > 0 || s.completadas > 0) // solo mostrar quien tiene actividad
+    .filter((s) => s.asignadas > 0 || s.completadas > 0)
     .sort((a, b) => b.completadas - a.completadas || b.asignadas - a.asignadas);
 
   return (
@@ -206,18 +269,18 @@ export default function Dashboard() {
             </Grid>
           </Grid>
 
-          {/* Borradores */}
+          {/* Borradores — asignación */}
           <Typography sx={{ fontSize: 11, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.04em', mb: 1.5 }}>
             Borradores
           </Typography>
           <Grid container spacing={2} sx={{ mb: 4 }}>
             <Grid size={{ xs: 12, sm: 4 }}>
-              <KpiCard titulo="Total borradores" valor={borradores} color="#B79B85" icono={<EditNoteOutlinedIcon fontSize="inherit" />} />
+              <KpiCard titulo="Total borradores" valor={totalBorradores} color="#B79B85" icono={<EditNoteOutlinedIcon fontSize="inherit" />} />
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
               <KpiCard titulo="Asignados" valor={borradoresAsignados} color="#7A6BB0"
                 icono={<AssignmentIndOutlinedIcon fontSize="inherit" />}
-                subtitulo={`${borradores > 0 ? Math.round((borradoresAsignados / borradores) * 100) : 0}% de los borradores`} />
+                subtitulo={`${totalBorradores > 0 ? Math.round((borradoresAsignados / totalBorradores) * 100) : 0}% de los borradores`} />
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
               <KpiCard titulo="Sin asignar" valor={borradoresSinAsignar} color="#C9A15A"
@@ -225,6 +288,145 @@ export default function Dashboard() {
                 subtitulo={borradoresSinAsignar > 0 ? 'Pendientes de asignar' : 'Todo asignado ✓'} />
             </Grid>
           </Grid>
+
+          {/* Etapas de construcción — estado actual de todos los borradores */}
+          {totalBorradoresActuales > 0 && (() => {
+            // Empresas de cada grupo para la tabla de detalle
+            const grupoPorEtapa: Record<Exclude<EtapaDetalle, null>, BorradorConEtapas[]> = {
+              sin_contactos: borradores.filter((b) => !b.tiene_contactos),
+              sin_usuarios:  borradores.filter((b) => !b.tiene_usuarios),
+              sin_servicios: borradores.filter((b) => !b.tiene_servicios),
+              listos:        borradores.filter((b) => b.tiene_contactos && b.tiene_usuarios && b.tiene_servicios),
+            };
+
+            const filasBarra = [
+              { key: 'sin_contactos' as EtapaDetalle, label: 'Sin contactos', valor: borradores.filter((b) => !b.tiene_contactos).length,  color: '#5E9C7C' },
+              { key: 'sin_usuarios'  as EtapaDetalle, label: 'Sin usuarios',  valor: borradores.filter((b) => !b.tiene_usuarios).length,   color: '#5B4E82' },
+              { key: 'sin_servicios' as EtapaDetalle, label: 'Sin servicios', valor: borradores.filter((b) => !b.tiene_servicios).length,  color: '#B79B85' },
+              { key: 'listos'        as EtapaDetalle, label: 'Listos ✓',      valor: listosParaCompletar,                                   color: '#7A6BB0' },
+            ];
+
+            return (
+              <>
+                <Typography sx={{ fontSize: 11, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.04em', mb: 1.5 }}>
+                  Construcción de borradores
+                </Typography>
+                <Card sx={{ mb: 4, overflow: 'hidden' }}>
+                  <Box sx={{ p: 2.5, pb: etapaDetalle ? 1.5 : 2.5 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.5 }}>
+                      <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: 'text.primary' }}>
+                        Progreso por etapa
+                      </Typography>
+                      <Typography sx={{ fontSize: 11, fontFamily: MONO_FONT, color: 'text.disabled' }}>
+                        {totalBorradoresActuales} borradores activos
+                      </Typography>
+                    </Box>
+                    <Typography sx={{ fontSize: 11, color: 'text.disabled', mb: 2 }}>
+                      Haz clic en una fila para ver cuáles empresas están en esa etapa
+                    </Typography>
+
+                    {/* Filas de barra — cada una es clickeable */}
+                    {filasBarra.map((fila) => {
+                      const abierta = etapaDetalle === fila.key;
+                      const empresasDetalle = grupoPorEtapa[fila.key as Exclude<EtapaDetalle, null>] ?? [];
+                      return (
+                        <Box key={String(fila.key)}>
+                          {/* Fila de barra clickeable */}
+                          <Box
+                            onClick={() => setEtapaDetalle(abierta ? null : fila.key)}
+                            sx={{
+                              display: 'grid', gridTemplateColumns: '110px 1fr 80px 28px',
+                              alignItems: 'center', gap: 1.5, py: 0.8, px: 1,
+                              borderRadius: '8px', cursor: 'pointer',
+                              bgcolor: abierta ? `${fila.color}0D` : 'transparent',
+                              '&:hover': { bgcolor: `${fila.color}0A` },
+                              transition: 'background-color 0.15s',
+                            }}
+                          >
+                            <Typography sx={{ fontSize: 12, color: abierta ? fila.color : 'text.secondary', fontWeight: abierta ? 700 : 500 }}>
+                              {fila.label}
+                            </Typography>
+                            <LinearProgress
+                              variant="determinate"
+                              value={totalBorradoresActuales === 0 ? 0 : Math.round((fila.valor / totalBorradoresActuales) * 100)}
+                              sx={{
+                                height: 7, borderRadius: 999,
+                                bgcolor: '#EAE5F5',
+                                '& .MuiLinearProgress-bar': { borderRadius: 999, bgcolor: fila.color },
+                              }}
+                            />
+                            <Typography sx={{ fontSize: 11, color: 'text.disabled', fontFamily: MONO_FONT, textAlign: 'right' }}>
+                              {fila.valor} / {totalBorradoresActuales}
+                            </Typography>
+                            <ExpandMoreIcon sx={{
+                              fontSize: 18, color: 'text.disabled',
+                              transform: abierta ? 'rotate(180deg)' : 'rotate(0deg)',
+                              transition: 'transform 0.2s',
+                            }} />
+                          </Box>
+
+                          {/* Tabla desplegable de empresas */}
+                          <Collapse in={abierta}>
+                            <Box sx={{ mx: 1, mb: 1, border: '1px solid #EAE5F5', borderRadius: '8px', overflow: 'hidden' }}>
+                              {empresasDetalle.length === 0 ? (
+                                <Typography sx={{ fontSize: 12, color: 'text.disabled', p: 2, textAlign: 'center' }}>
+                                  Sin empresas en esta etapa.
+                                </Typography>
+                              ) : (
+                                <Table size="small">
+                                  <TableHead>
+                                    <TableRow sx={{ bgcolor: '#FAF8FD' }}>
+                                      <TableCell sx={{ fontSize: 10, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.03em', py: 0.8 }}>Empkey</TableCell>
+                                      <TableCell sx={{ fontSize: 10, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.03em', py: 0.8 }}>Razón social</TableCell>
+                                      <TableCell sx={{ fontSize: 10, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', letterSpacing: '0.03em', py: 0.8 }}>Etapas</TableCell>
+                                      <TableCell sx={{ width: 36 }} />
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    {empresasDetalle.map((b: BorradorConEtapas) => {
+                                      const etapasOk = [true, b.tiene_contactos, b.tiene_usuarios, b.tiene_servicios];
+                                      const etapaLabels = ['Datos', 'Contactos', 'Usuarios', 'Servicios'];
+                                      const etapaColors = ['#7A6BB0', '#5E9C7C', '#5B4E82', '#B79B85'];
+                                      return (
+                                        <TableRow key={b.id} hover sx={{ cursor: 'pointer' }}
+                                          onClick={() => navigate(`/formulario-inscripcion/${b.empkey}`)}>
+                                          <TableCell sx={{ fontFamily: MONO_FONT, fontSize: 12, color: 'secondary.main', fontWeight: 600, py: 1 }}>
+                                            {b.empkey}
+                                          </TableCell>
+                                          <TableCell sx={{ fontSize: 12.5, fontWeight: 600, py: 1, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {b.razon_social}
+                                          </TableCell>
+                                          <TableCell sx={{ py: 1 }}>
+                                            <Box sx={{ display: 'flex', gap: '3px' }}>
+                                              {etapaLabels.map((lbl, i) => (
+                                                <Box key={lbl} title={lbl} sx={{
+                                                  width: 8, height: 8, borderRadius: '50%',
+                                                  bgcolor: etapasOk[i] ? etapaColors[i] : '#EAE5F5',
+                                                }} />
+                                              ))}
+                                            </Box>
+                                          </TableCell>
+                                          <TableCell sx={{ py: 1, pr: 1 }}>
+                                            <IconButton size="small" sx={{ color: 'text.disabled' }}>
+                                              <OpenInNewIcon sx={{ fontSize: 14 }} />
+                                            </IconButton>
+                                          </TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
+                                  </TableBody>
+                                </Table>
+                              )}
+                            </Box>
+                          </Collapse>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                </Card>
+              </>
+            );
+          })()}
 
           {/* Por perfil */}
           {statsPerfiles.length > 0 && (
