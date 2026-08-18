@@ -27,6 +27,16 @@ type Empresa = {
 type Contacto = { id: string; tipo: string; nombre: string; apellido: string; correo: string | null; telefono: string | null };
 type Usuario = { id: string; rut: string; nombre: string; estado: string; fecha_desde: string };
 type EmpresaServicio = { id: string; detalles: any; estado: string; servicio: { codigo: string; nombre: string; grupo: string } };
+type Representante = { id: string; rut: string; nombre_completo: string; tipo: 'representante_legal' | 'autorizado_sii'; estado: string };
+
+const ETIQUETA_TIPO: Record<Representante['tipo'], string> = {
+  representante_legal: 'Representante Legal',
+  autorizado_sii: 'Autorizado SII',
+};
+const COLOR_TIPO: Record<Representante['tipo'], string> = {
+  representante_legal: '#7A6BB0',
+  autorizado_sii: '#5E9C7C',
+};
 
 export default function FichaEmpresa() {
   const { empkey } = useParams();
@@ -37,6 +47,7 @@ export default function FichaEmpresa() {
   const [contactos, setContactos] = useState<Contacto[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [servicios, setServicios] = useState<EmpresaServicio[]>([]);
+  const [representantes, setRepresentantes] = useState<Representante[]>([]);
   const [anchorAcciones, setAnchorAcciones] = useState<null | HTMLElement>(null);
   const [dialogoEliminar, setDialogoEliminar] = useState(false);
   const [dialogoEliminarPermanente, setDialogoEliminarPermanente] = useState(false);
@@ -48,29 +59,31 @@ export default function FichaEmpresa() {
   useEffect(() => {
     async function cargar() {
       const { data: empresaData } = await supabase.from('empresas').select('*').eq('empkey', Number(empkey)).single();
-      if (!empresaData) {
-        setCargando(false);
-        return;
-      }
+      if (!empresaData) { setCargando(false); return; }
       setEmpresa(empresaData);
 
-      const [{ data: contactosData }, { data: usuariosData }, { data: serviciosData }] = await Promise.all([
+      const [
+        { data: contactosData },
+        { data: usuariosData },
+        { data: serviciosData },
+        { data: representantesData },
+      ] = await Promise.all([
         supabase.from('contactos').select('*').eq('empresa_id', empresaData.id),
         supabase.from('usuarios_activos').select('*').eq('empresa_id', empresaData.id),
         supabase.from('empresa_servicios').select('id, detalles, estado, servicio:servicio_id(codigo, nombre, grupo)').eq('empresa_id', empresaData.id),
+        supabase.from('representantes').select('*').eq('empresa_id', empresaData.id).order('tipo'),
       ]);
 
       setContactos(contactosData ?? []);
       setUsuarios(usuariosData ?? []);
       setServicios((serviciosData as any) ?? []);
+      setRepresentantes((representantesData as any) ?? []);
       setCargando(false);
     }
     cargar();
   }, [empkey]);
 
-  function iniciales(nombre: string) {
-    return nombre.slice(0, 2).toUpperCase();
-  }
+  function iniciales(nombre: string) { return nombre.slice(0, 2).toUpperCase(); }
 
   async function cambiarEstado(nuevoEstado: 'activa' | 'caducada' | 'eliminada') {
     if (!empresa) return;
@@ -80,10 +93,7 @@ export default function FichaEmpresa() {
     setProcesando(false);
     setAnchorAcciones(null);
     setDialogoEliminar(false);
-    if (error) {
-      setErrorAccion('No se pudo actualizar el estado: ' + error.message);
-      return;
-    }
+    if (error) { setErrorAccion('No se pudo actualizar el estado: ' + error.message); return; }
     setEmpresa({ ...empresa, estado_empresa: nuevoEstado });
   }
 
@@ -91,18 +101,12 @@ export default function FichaEmpresa() {
     if (!empresa) return;
     setEliminandoPermanente(true);
     setErrorAccion(null);
-
-    const { data, error: errorFuncion } = await supabase.functions.invoke('permanently-delete-empresa', {
-      body: { empresaId: empresa.id },
-    });
-
+    const { data, error: errorFuncion } = await supabase.functions.invoke('permanently-delete-empresa', { body: { empresaId: empresa.id } });
     setEliminandoPermanente(false);
-
     if (errorFuncion || data?.error) {
       setErrorAccion(data?.error || errorFuncion?.message || 'No se pudo eliminar la empresa permanentemente');
       return;
     }
-
     setDialogoEliminarPermanente(false);
     navigate('/');
   }
@@ -125,18 +129,9 @@ export default function FichaEmpresa() {
 
   const tecnicos = contactos.filter((c) => c.tipo === 'tecnico');
   const facturacion = contactos.filter((c) => c.tipo === 'facturacion');
-
-  // Puede editar: admin, lider, o el agente que creó/tiene asignado el borrador
-  const puedeEditar = esAdmin || esLider ||
-    (empresa.creado_por === session?.user.id || empresa.asignado_a === session?.user.id);
-
-  // Menú Acciones: visible para admin y lider (con acciones distintas)
+  const puedeEditar = esAdmin || esLider || (empresa.creado_por === session?.user.id || empresa.asignado_a === session?.user.id);
   const tieneAcciones = esAdmin || esLider;
-
-  // Acciones disponibles según rol y estado
-  //const puedeEliminarOReactivarComoEliminada = esAdmin; // solo admin mueve a/desde 'eliminada'
-  const puedeCaducarReactivar = esAdmin || esLider;     // lider puede activa↔caducada
-
+  const puedeCaducarReactivar = esAdmin || esLider;
   const detallesPorCodigo = Object.fromEntries(servicios.map((s) => [s.servicio.codigo, s.detalles]));
   const documentosParaBO = computeDocumentosParaBO(detallesPorCodigo);
 
@@ -147,76 +142,51 @@ export default function FichaEmpresa() {
           Volver a Empresas
         </Button>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          {/* Botón Editar: visible si puede editar y no es solo vista */}
           {puedeEditar && !esVista && (
             <Button startIcon={<EditOutlinedIcon />} variant="outlined" size="small" onClick={() => navigate(`/formulario-inscripcion/${empkey}`)}>
               Editar información
             </Button>
           )}
-
-          {/* Menú Acciones: admin y lider, con opciones distintas */}
           {tieneAcciones && (
             <>
-              <Button
-                startIcon={<MoreVertIcon />}
-                variant="outlined"
-                size="small"
-                color="inherit"
+              <Button startIcon={<MoreVertIcon />} variant="outlined" size="small" color="inherit"
                 onClick={(e) => setAnchorAcciones(e.currentTarget)}
-                sx={{ color: 'text.secondary', borderColor: 'divider' }}
-              >
+                sx={{ color: 'text.secondary', borderColor: 'divider' }}>
                 Acciones
               </Button>
               <Menu anchorEl={anchorAcciones} open={Boolean(anchorAcciones)} onClose={() => setAnchorAcciones(null)}>
-                {/* Estado: activa */}
                 {empresa.estado_empresa === 'activa' && puedeCaducarReactivar && (
                   <MenuItem onClick={() => cambiarEstado('caducada')} disabled={procesando} sx={{ fontSize: 13.5, gap: 1.2 }}>
-                    <EventBusyOutlinedIcon fontSize="small" sx={{ color: '#B7791F' }} />
-                    Marcar como caducada
+                    <EventBusyOutlinedIcon fontSize="small" sx={{ color: '#B7791F' }} /> Marcar como caducada
                   </MenuItem>
                 )}
                 {empresa.estado_empresa === 'activa' && esAdmin && (
                   <MenuItem onClick={() => { setAnchorAcciones(null); setDialogoEliminar(true); }} sx={{ fontSize: 13.5, gap: 1.2 }}>
-                    <DeleteOutlineIcon fontSize="small" sx={{ color: 'error.main' }} />
-                    Eliminar empresa
+                    <DeleteOutlineIcon fontSize="small" sx={{ color: 'error.main' }} /> Eliminar empresa
                   </MenuItem>
                 )}
-
-                {/* Estado: caducada */}
                 {empresa.estado_empresa === 'caducada' && puedeCaducarReactivar && (
                   <MenuItem onClick={() => cambiarEstado('activa')} disabled={procesando} sx={{ fontSize: 13.5, gap: 1.2 }}>
-                    <EventAvailableOutlinedIcon fontSize="small" sx={{ color: 'secondary.main' }} />
-                    Reactivar empresa
+                    <EventAvailableOutlinedIcon fontSize="small" sx={{ color: 'secondary.main' }} /> Reactivar empresa
                   </MenuItem>
                 )}
                 {empresa.estado_empresa === 'caducada' && esAdmin && (
                   <MenuItem onClick={() => { setAnchorAcciones(null); setDialogoEliminar(true); }} sx={{ fontSize: 13.5, gap: 1.2 }}>
-                    <DeleteOutlineIcon fontSize="small" sx={{ color: 'error.main' }} />
-                    Eliminar empresa
+                    <DeleteOutlineIcon fontSize="small" sx={{ color: 'error.main' }} /> Eliminar empresa
                   </MenuItem>
                 )}
-
-                {/* Estado: eliminada — solo admin */}
                 {empresa.estado_empresa === 'eliminada' && esAdmin && [
                   <MenuItem key="reactivar" onClick={() => cambiarEstado('activa')} disabled={procesando} sx={{ fontSize: 13.5, gap: 1.2 }}>
-                    <EventAvailableOutlinedIcon fontSize="small" sx={{ color: 'secondary.main' }} />
-                    Reactivar empresa
+                    <EventAvailableOutlinedIcon fontSize="small" sx={{ color: 'secondary.main' }} /> Reactivar empresa
                   </MenuItem>,
-                  <MenuItem
-                    key="eliminar-permanente"
+                  <MenuItem key="eliminar-permanente"
                     onClick={() => { setAnchorAcciones(null); setDialogoEliminarPermanente(true); setTextoConfirmacion(''); }}
-                    sx={{ fontSize: 13.5, gap: 1.2 }}
-                  >
-                    <DeleteForeverOutlinedIcon fontSize="small" sx={{ color: 'error.main' }} />
-                    Eliminar permanentemente
+                    sx={{ fontSize: 13.5, gap: 1.2 }}>
+                    <DeleteForeverOutlinedIcon fontSize="small" sx={{ color: 'error.main' }} /> Eliminar permanentemente
                   </MenuItem>,
                 ]}
-
-                {/* Si el lider ve una empresa eliminada, no tiene ninguna acción disponible */}
                 {empresa.estado_empresa === 'eliminada' && esLider && !esAdmin && (
-                  <MenuItem disabled sx={{ fontSize: 13, color: 'text.disabled' }}>
-                    Sin acciones disponibles
-                  </MenuItem>
+                  <MenuItem disabled sx={{ fontSize: 13, color: 'text.disabled' }}>Sin acciones disponibles</MenuItem>
                 )}
               </Menu>
             </>
@@ -233,7 +203,6 @@ export default function FichaEmpresa() {
           </Typography>
         </Box>
       )}
-
       {empresa.estado_empresa === 'eliminada' && (
         <Box sx={{ mb: 2, p: 1.5, borderRadius: '8px', bgcolor: 'rgba(199,123,134,0.12)' }}>
           <Typography sx={{ fontSize: 12.5, color: '#A85F6A', fontWeight: 600 }}>
@@ -242,13 +211,12 @@ export default function FichaEmpresa() {
         </Box>
       )}
 
-      {/* Diálogo de confirmación para eliminar */}
+      {/* Diálogo eliminar */}
       <Dialog open={dialogoEliminar} onClose={() => setDialogoEliminar(false)}>
         <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>¿Eliminar esta empresa?</DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>
-            La empresa dejará de aparecer como activa. Es reversible — puedes volver a activarla desde
-            "Acciones → Reactivar empresa" en cualquier momento.
+            La empresa dejará de aparecer como activa. Es reversible — puedes volver a activarla desde "Acciones → Reactivar empresa".
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
@@ -259,33 +227,25 @@ export default function FichaEmpresa() {
         </DialogActions>
       </Dialog>
 
-      {/* Diálogo de confirmación para eliminar PERMANENTEMENTE */}
+      {/* Diálogo eliminar permanentemente */}
       <Dialog open={dialogoEliminarPermanente} onClose={() => setDialogoEliminarPermanente(false)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontSize: 16, fontWeight: 700, color: 'error.main' }}>⚠️ Eliminar permanentemente</DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: 13.5, color: 'text.secondary', mb: 2 }}>
-            Esta acción es <strong>irreversible</strong>. Se borrará toda la información de <strong>{empresa?.razon_social}</strong> —
-            contactos, usuarios y servicios — de forma permanente. Antes de borrar, se enviará un respaldo en CSV
-            por correo a todos los admins.
+            Esta acción es <strong>irreversible</strong>. Se borrará toda la información de <strong>{empresa?.razon_social}</strong> de forma permanente.
+            Antes de borrar, se enviará un respaldo en CSV por correo a todos los admins.
           </Typography>
           <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 1 }}>
             Escribe <strong>{empresa?.razon_social}</strong> para confirmar:
           </Typography>
-          <TextField
-            fullWidth size="small" autoFocus
-            value={textoConfirmacion}
-            onChange={(e) => setTextoConfirmacion(e.target.value)}
-            placeholder={empresa?.razon_social}
-          />
+          <TextField fullWidth size="small" autoFocus value={textoConfirmacion}
+            onChange={(e) => setTextoConfirmacion(e.target.value)} placeholder={empresa?.razon_social} />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           <Button onClick={() => setDialogoEliminarPermanente(false)} sx={{ color: 'text.secondary' }}>Cancelar</Button>
-          <Button
-            onClick={eliminarPermanentemente}
+          <Button onClick={eliminarPermanentemente}
             disabled={eliminandoPermanente || textoConfirmacion.trim() !== empresa?.razon_social}
-            variant="contained"
-            color="error"
-          >
+            variant="contained" color="error">
             {eliminandoPermanente ? 'Eliminando...' : 'Eliminar permanentemente'}
           </Button>
         </DialogActions>
@@ -302,6 +262,7 @@ export default function FichaEmpresa() {
         </Box>
       )}
 
+      {/* Header empresa */}
       <Card sx={{ p: 3, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
           <Box sx={{ display: 'flex', gap: 2 }}>
@@ -317,19 +278,49 @@ export default function FichaEmpresa() {
           </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Box sx={{ bgcolor: '#F5F2FB', border: '1px solid #EAE5F5', borderRadius: '8px', px: 1.5, py: 0.7 }}>
-              <Typography sx={{ fontFamily: MONO_FONT, fontSize: 12.5, fontWeight: 600, color: 'secondary.main' }}>
-                {empresa.rut}
-              </Typography>
+              <Typography sx={{ fontFamily: MONO_FONT, fontSize: 12.5, fontWeight: 600, color: 'secondary.main' }}>{empresa.rut}</Typography>
             </Box>
             <Box sx={{ bgcolor: '#F5F2FB', border: '1px solid #EAE5F5', borderRadius: '8px', px: 1.5, py: 0.7 }}>
-              <Typography sx={{ fontFamily: MONO_FONT, fontSize: 12.5, fontWeight: 600, color: 'text.secondary' }}>
-                Empkey {empresa.empkey}
-              </Typography>
+              <Typography sx={{ fontFamily: MONO_FONT, fontSize: 12.5, fontWeight: 600, color: 'text.secondary' }}>Empkey {empresa.empkey}</Typography>
             </Box>
           </Box>
         </Box>
       </Card>
 
+      {/* ── Representantes ── */}
+      {representantes.length > 0 && (
+        <>
+          <Typography sx={{ fontSize: 12, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', mb: 1.5 }}>
+            Representantes ({representantes.length})
+          </Typography>
+          <Grid container spacing={2} sx={{ mb: 4 }}>
+            {representantes.map((r) => (
+              <Grid key={r.id} size={{ xs: 12, sm: 6 }}>
+                <Card sx={{ p: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.8 }}>
+                    <Typography sx={{
+                      fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase',
+                      color: COLOR_TIPO[r.tipo],
+                    }}>
+                      {ETIQUETA_TIPO[r.tipo]}
+                    </Typography>
+                    {r.estado === 'inactivo' && (
+                      <Chip label="Inactivo" size="small"
+                        sx={{ fontSize: 10, height: 16, bgcolor: 'rgba(139,132,163,0.12)', color: 'text.disabled' }} />
+                    )}
+                  </Box>
+                  <Typography sx={{ fontFamily: MONO_FONT, fontSize: 12, color: 'secondary.main', fontWeight: 600, mb: 0.3 }}>
+                    {r.rut}
+                  </Typography>
+                  <Typography sx={{ fontWeight: 700, fontSize: 14 }}>{r.nombre_completo}</Typography>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </>
+      )}
+
+      {/* ── Contactos ── */}
       <Typography sx={{ fontSize: 12, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', mb: 1.5 }}>
         Contacto de Empresa
       </Typography>
@@ -385,6 +376,7 @@ export default function FichaEmpresa() {
         ))}
       </Grid>
 
+      {/* ── Usuarios activos ── */}
       <Typography sx={{ fontSize: 12, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', mb: 1.5 }}>
         Usuarios Activos ({usuarios.filter((u) => u.estado === 'activo').length})
       </Typography>
@@ -409,9 +401,7 @@ export default function FichaEmpresa() {
                   <Box component="td" sx={{ fontSize: 13, fontWeight: 600, px: 2, py: 1, borderBottom: '1px solid #EAE5F5' }}>{u.nombre}</Box>
                   <Box component="td" sx={{ fontFamily: MONO_FONT, fontSize: 11.5, color: 'text.disabled', px: 2, py: 1, borderBottom: '1px solid #EAE5F5' }}>{u.fecha_desde}</Box>
                   <Box component="td" sx={{ px: 2, py: 1, borderBottom: '1px solid #EAE5F5' }}>
-                    <Chip
-                      label={bonito(u.estado)}
-                      size="small"
+                    <Chip label={bonito(u.estado)} size="small"
                       sx={{
                         fontSize: 10, fontWeight: 700, height: 18,
                         bgcolor: u.estado === 'activo' ? 'rgba(94,156,122,0.12)' : 'rgba(139,132,163,0.12)',
@@ -426,6 +416,7 @@ export default function FichaEmpresa() {
         </Card>
       )}
 
+      {/* ── Servicios contratados ── */}
       <Typography sx={{ fontSize: 12, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', mb: 1.5 }}>
         Servicios Contratados ({servicios.length})
       </Typography>
@@ -443,9 +434,7 @@ export default function FichaEmpresa() {
                     <Box sx={{ width: 28, height: 28, borderRadius: '7px', bgcolor: `${color}1A`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Icono sx={{ fontSize: 15, color }} />
                     </Box>
-                    <Typography sx={{ fontFamily: MONO_FONT, fontSize: 12, fontWeight: 700, color: 'secondary.main' }}>
-                      {s.servicio.codigo}
-                    </Typography>
+                    <Typography sx={{ fontFamily: MONO_FONT, fontSize: 12, fontWeight: 700, color: 'secondary.main' }}>{s.servicio.codigo}</Typography>
                     <Typography sx={{ fontSize: 13.5, fontWeight: 600 }}>{s.servicio.nombre}</Typography>
                   </Box>
                 </AccordionSummary>
