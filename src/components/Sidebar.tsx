@@ -13,6 +13,7 @@ import GroupAddOutlinedIcon from '@mui/icons-material/GroupAddOutlined';
 import ContactsOutlinedIcon from '@mui/icons-material/ContactsOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { LockOutlined as LockOutlinedIcon } from '@mui/icons-material';
@@ -102,6 +103,10 @@ export function Sidebar() {
     ] : []),
     ...(puedeGestionar ? [
       { label: 'Dashboard', path: '/dashboard', icon: <DashboardOutlinedIcon fontSize="small" /> },
+    ] : []),
+    // Auditoría de borradores: solo admin y lider
+    ...(puedeGestionar ? [
+      { label: 'Auditoría borradores', path: '/historial-borradores', icon: <HistoryOutlinedIcon fontSize="small" /> },
     ] : []),
   ];
 

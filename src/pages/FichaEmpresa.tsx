@@ -10,6 +10,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MailOutlineIcon from '@mui/icons-material/MailOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import { EditOutlined as EditOutlinedIcon, DeleteOutlined as DeleteOutlineIcon, EventBusyOutlined as EventBusyOutlinedIcon, EventAvailableOutlined as EventAvailableOutlinedIcon, DeleteForeverOutlined as DeleteForeverOutlinedIcon } from '@mui/icons-material';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import { supabase } from '../lib/supabaseClient';
@@ -41,7 +42,7 @@ const COLOR_TIPO: Record<Representante['tipo'], string> = {
 export default function FichaEmpresa() {
   const { empkey } = useParams();
   const navigate = useNavigate();
-  const { session, esAdmin, esLider, esVista } = useAuth();
+  const { session, esAdmin, esLider, esVista, puedeGestionar } = useAuth();
   const [cargando, setCargando] = useState(true);
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [contactos, setContactos] = useState<Contacto[]>([]);
@@ -143,10 +144,26 @@ export default function FichaEmpresa() {
         </Button>
         <Box sx={{ display: 'flex', gap: 1 }}>
           {puedeEditar && !esVista && (
-            <Button startIcon={<EditOutlinedIcon />} variant="outlined" size="small" onClick={() => navigate(`/formulario-inscripcion/${empkey}`)}>
+            <Button startIcon={<EditOutlinedIcon />} variant="outlined" size="small"
+              onClick={() => navigate(`/formulario-inscripcion/${empkey}`)}>
               Editar información
             </Button>
           )}
+
+          {/* Historial: solo admin/lider, solo empresas completadas */}
+          {puedeGestionar && empresa.completado && (
+            <Button
+              startIcon={<HistoryOutlinedIcon />}
+              variant="outlined"
+              size="small"
+              color="inherit"
+              onClick={() => navigate(`/empresas/${empkey}/historial`)}
+              sx={{ color: 'text.secondary', borderColor: 'divider' }}
+            >
+              Historial
+            </Button>
+          )}
+
           {tieneAcciones && (
             <>
               <Button startIcon={<MoreVertIcon />} variant="outlined" size="small" color="inherit"
@@ -211,7 +228,6 @@ export default function FichaEmpresa() {
         </Box>
       )}
 
-      {/* Diálogo eliminar */}
       <Dialog open={dialogoEliminar} onClose={() => setDialogoEliminar(false)}>
         <DialogTitle sx={{ fontSize: 16, fontWeight: 700 }}>¿Eliminar esta empresa?</DialogTitle>
         <DialogContent>
@@ -227,13 +243,11 @@ export default function FichaEmpresa() {
         </DialogActions>
       </Dialog>
 
-      {/* Diálogo eliminar permanentemente */}
       <Dialog open={dialogoEliminarPermanente} onClose={() => setDialogoEliminarPermanente(false)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontSize: 16, fontWeight: 700, color: 'error.main' }}>⚠️ Eliminar permanentemente</DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: 13.5, color: 'text.secondary', mb: 2 }}>
             Esta acción es <strong>irreversible</strong>. Se borrará toda la información de <strong>{empresa?.razon_social}</strong> de forma permanente.
-            Antes de borrar, se enviará un respaldo en CSV por correo a todos los admins.
           </Typography>
           <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 1 }}>
             Escribe <strong>{empresa?.razon_social}</strong> para confirmar:
@@ -262,7 +276,6 @@ export default function FichaEmpresa() {
         </Box>
       )}
 
-      {/* Header empresa */}
       <Card sx={{ p: 3, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
           <Box sx={{ display: 'flex', gap: 2 }}>
@@ -287,7 +300,6 @@ export default function FichaEmpresa() {
         </Box>
       </Card>
 
-      {/* ── Representantes ── */}
       {representantes.length > 0 && (
         <>
           <Typography sx={{ fontSize: 12, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', mb: 1.5 }}>
@@ -298,10 +310,7 @@ export default function FichaEmpresa() {
               <Grid key={r.id} size={{ xs: 12, sm: 6 }}>
                 <Card sx={{ p: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.8 }}>
-                    <Typography sx={{
-                      fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase',
-                      color: COLOR_TIPO[r.tipo],
-                    }}>
+                    <Typography sx={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: COLOR_TIPO[r.tipo] }}>
                       {ETIQUETA_TIPO[r.tipo]}
                     </Typography>
                     {r.estado === 'inactivo' && (
@@ -320,7 +329,6 @@ export default function FichaEmpresa() {
         </>
       )}
 
-      {/* ── Contactos ── */}
       <Typography sx={{ fontSize: 12, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', mb: 1.5 }}>
         Contacto de Empresa
       </Typography>
@@ -333,50 +341,25 @@ export default function FichaEmpresa() {
         {tecnicos.map((c) => (
           <Grid key={c.id} size={{ xs: 12, sm: 6 }}>
             <Card sx={{ p: 2 }}>
-              <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: 'secondary.main', textTransform: 'uppercase', mb: 0.5 }}>
-                Contraparte Técnica
-              </Typography>
+              <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: 'secondary.main', textTransform: 'uppercase', mb: 0.5 }}>Contraparte Técnica</Typography>
               <Typography sx={{ fontWeight: 700, fontSize: 14 }}>{c.nombre} {c.apellido}</Typography>
-              {c.correo && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, mt: 0.5 }}>
-                  <MailOutlineIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
-                  <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{c.correo}</Typography>
-                </Box>
-              )}
-              {c.telefono && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, mt: 0.3 }}>
-                  <PhoneOutlinedIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
-                  <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{c.telefono}</Typography>
-                </Box>
-              )}
+              {c.correo && <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, mt: 0.5 }}><MailOutlineIcon sx={{ fontSize: 13, color: 'text.disabled' }} /><Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{c.correo}</Typography></Box>}
+              {c.telefono && <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, mt: 0.3 }}><PhoneOutlinedIcon sx={{ fontSize: 13, color: 'text.disabled' }} /><Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{c.telefono}</Typography></Box>}
             </Card>
           </Grid>
         ))}
         {facturacion.map((c) => (
           <Grid key={c.id} size={{ xs: 12, sm: 6 }}>
             <Card sx={{ p: 2 }}>
-              <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: 'primary.main', textTransform: 'uppercase', mb: 0.5 }}>
-                Contacto de Facturación
-              </Typography>
+              <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: 'primary.main', textTransform: 'uppercase', mb: 0.5 }}>Contacto de Facturación</Typography>
               <Typography sx={{ fontWeight: 700, fontSize: 14 }}>{c.nombre} {c.apellido}</Typography>
-              {c.correo && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, mt: 0.5 }}>
-                  <MailOutlineIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
-                  <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{c.correo}</Typography>
-                </Box>
-              )}
-              {c.telefono && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, mt: 0.3 }}>
-                  <PhoneOutlinedIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
-                  <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{c.telefono}</Typography>
-                </Box>
-              )}
+              {c.correo && <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, mt: 0.5 }}><MailOutlineIcon sx={{ fontSize: 13, color: 'text.disabled' }} /><Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{c.correo}</Typography></Box>}
+              {c.telefono && <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, mt: 0.3 }}><PhoneOutlinedIcon sx={{ fontSize: 13, color: 'text.disabled' }} /><Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{c.telefono}</Typography></Box>}
             </Card>
           </Grid>
         ))}
       </Grid>
 
-      {/* ── Usuarios activos ── */}
       <Typography sx={{ fontSize: 12, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', mb: 1.5 }}>
         Usuarios Activos ({usuarios.filter((u) => u.estado === 'activo').length})
       </Typography>
@@ -388,9 +371,7 @@ export default function FichaEmpresa() {
             <Box component="thead">
               <Box component="tr" sx={{ bgcolor: '#FAF8FD' }}>
                 {['RUT', 'Nombre', 'Desde', 'Estado'].map((h) => (
-                  <Box component="th" key={h} sx={{ textAlign: 'left', fontSize: 10.5, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', px: 2, py: 1, borderBottom: '1px solid #EAE5F5' }}>
-                    {h}
-                  </Box>
+                  <Box component="th" key={h} sx={{ textAlign: 'left', fontSize: 10.5, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', px: 2, py: 1, borderBottom: '1px solid #EAE5F5' }}>{h}</Box>
                 ))}
               </Box>
             </Box>
@@ -402,12 +383,7 @@ export default function FichaEmpresa() {
                   <Box component="td" sx={{ fontFamily: MONO_FONT, fontSize: 11.5, color: 'text.disabled', px: 2, py: 1, borderBottom: '1px solid #EAE5F5' }}>{u.fecha_desde}</Box>
                   <Box component="td" sx={{ px: 2, py: 1, borderBottom: '1px solid #EAE5F5' }}>
                     <Chip label={bonito(u.estado)} size="small"
-                      sx={{
-                        fontSize: 10, fontWeight: 700, height: 18,
-                        bgcolor: u.estado === 'activo' ? 'rgba(94,156,122,0.12)' : 'rgba(139,132,163,0.12)',
-                        color: u.estado === 'activo' ? 'secondary.main' : 'text.disabled',
-                      }}
-                    />
+                      sx={{ fontSize: 10, fontWeight: 700, height: 18, bgcolor: u.estado === 'activo' ? 'rgba(94,156,122,0.12)' : 'rgba(139,132,163,0.12)', color: u.estado === 'activo' ? 'secondary.main' : 'text.disabled' }} />
                   </Box>
                 </Box>
               ))}
@@ -416,7 +392,6 @@ export default function FichaEmpresa() {
         </Card>
       )}
 
-      {/* ── Servicios contratados ── */}
       <Typography sx={{ fontSize: 12, fontWeight: 700, color: 'text.disabled', textTransform: 'uppercase', mb: 1.5 }}>
         Servicios Contratados ({servicios.length})
       </Typography>
@@ -439,12 +414,8 @@ export default function FichaEmpresa() {
                   </Box>
                 </AccordionSummary>
                 <AccordionDetails>
-                  <DetalleServicioView
-                    codigo={s.servicio.codigo}
-                    nombreServicio={s.servicio.nombre}
-                    detalle={s.detalles}
-                    documentosCalculadosBO={s.servicio.codigo === 'BO' ? documentosParaBO : undefined}
-                  />
+                  <DetalleServicioView codigo={s.servicio.codigo} nombreServicio={s.servicio.nombre} detalle={s.detalles}
+                    documentosCalculadosBO={s.servicio.codigo === 'BO' ? documentosParaBO : undefined} />
                 </AccordionDetails>
               </Accordion>
             );

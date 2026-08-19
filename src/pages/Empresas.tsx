@@ -27,6 +27,7 @@ type Empresa = {
   completado: boolean;
   estado_empresa: 'activa' | 'caducada' | 'eliminada';
   asignado_a: string | null;
+  _representantes: number;
   _contactos: number;
   _usuarios: number;
   _servicios: number;
@@ -38,7 +39,7 @@ type AgentePerfil = {
   correo: string | null;
 };
 
-type FiltroEtapaValor = 'sin_contactos' | 'sin_usuarios' | 'sin_servicios' | 'listos';
+type FiltroEtapaValor = 'sin_representantes' | 'sin_contactos' | 'sin_usuarios' | 'sin_servicios' | 'listos';
 type FiltroEtapa = FiltroEtapaValor | null;
 
 // ─── Helpers visuales ─────────────────────────────────────────────────────────
@@ -64,18 +65,20 @@ function grupoDeEmpresa(e: Empresa): 'borrador' | 'activa' | 'caducada' | 'elimi
 // ─── Barra de 4 segmentos de etapas ──────────────────────────────────────────
 
 const ETAPAS = [
-  { key: 'datos',     label: 'Datos',     color: '#7A6BB0' },
-  { key: 'contactos', label: 'Contactos', color: '#5E9C7C' },
-  { key: 'usuarios',  label: 'Usuarios',  color: '#5B4E82' },
-  { key: 'servicios', label: 'Servicios', color: '#B79B85' },
+  { key: 'datos',           label: 'Datos',           color: '#7A6BB0' },
+  { key: 'representantes',  label: 'Representantes',  color: '#9B8EC4' },
+  { key: 'contactos',       label: 'Contactos',       color: '#5E9C7C' },
+  { key: 'usuarios',        label: 'Usuarios',        color: '#5B4E82' },
+  { key: 'servicios',       label: 'Servicios',       color: '#B79B85' },
 ];
 
 function ProgresoEtapas({ empresa }: { empresa: Empresa }) {
   const etapasOk = [
-    true,
-    empresa._contactos > 0,
-    empresa._usuarios > 0,
-    empresa._servicios > 0,
+    true,                           // Datos: siempre ✓
+    empresa._representantes > 0,    // Representantes
+    empresa._contactos > 0,         // Contactos
+    empresa._usuarios > 0,          // Usuarios
+    empresa._servicios > 0,         // Servicios
   ];
   const completadas = etapasOk.filter(Boolean).length;
   const tooltipTexto = ETAPAS.map((e, i) => `${etapasOk[i] ? '✓' : '○'} ${e.label}`).join('  ');
@@ -94,7 +97,7 @@ function ProgresoEtapas({ empresa }: { empresa: Empresa }) {
           ))}
         </Box>
         <Typography sx={{ fontSize: 10, color: 'text.disabled', mt: 0.4 }}>
-          {completadas === 4 ? 'Lista para completar' : `${completadas}/4 etapas`}
+          {completadas === 5 ? 'Lista para completar' : `${completadas}/5 etapas`}
         </Typography>
       </Box>
     </Tooltip>
@@ -189,18 +192,20 @@ function CardEmpresa({
 // ─── Filtros de etapa ─────────────────────────────────────────────────────────
 
 const FILTROS_ETAPA: { value: FiltroEtapaValor; label: string; color: string }[] = [
-  { value: 'sin_contactos', label: 'Sin contactos', color: '#5E9C7C' },
-  { value: 'sin_usuarios',  label: 'Sin usuarios',  color: '#5B4E82' },
-  { value: 'sin_servicios', label: 'Sin servicios', color: '#B79B85' },
-  { value: 'listos',        label: 'Listos ✓',      color: '#7A6BB0' },
+  { value: 'sin_representantes', label: 'Sin representantes', color: '#9B8EC4' },
+  { value: 'sin_contactos',      label: 'Sin contactos',      color: '#5E9C7C' },
+  { value: 'sin_usuarios',       label: 'Sin usuarios',       color: '#5B4E82' },
+  { value: 'sin_servicios',      label: 'Sin servicios',      color: '#B79B85' },
+  { value: 'listos',             label: 'Listos ✓',           color: '#7A6BB0' },
 ];
 
 function aplicarFiltroEtapa(empresas: Empresa[], filtro: FiltroEtapa): Empresa[] {
   if (!filtro) return empresas;
-  if (filtro === 'sin_contactos') return empresas.filter((e) => e._contactos === 0);
-  if (filtro === 'sin_usuarios')  return empresas.filter((e) => e._usuarios === 0);
-  if (filtro === 'sin_servicios') return empresas.filter((e) => e._servicios === 0);
-  if (filtro === 'listos')        return empresas.filter((e) => e._contactos > 0 && e._usuarios > 0 && e._servicios > 0);
+  if (filtro === 'sin_representantes') return empresas.filter((e) => e._representantes === 0);
+  if (filtro === 'sin_contactos')      return empresas.filter((e) => e._contactos === 0);
+  if (filtro === 'sin_usuarios')       return empresas.filter((e) => e._usuarios === 0);
+  if (filtro === 'sin_servicios')      return empresas.filter((e) => e._servicios === 0);
+  if (filtro === 'listos')             return empresas.filter((e) => e._representantes > 0 && e._contactos > 0 && e._usuarios > 0 && e._servicios > 0);
   return empresas;
 }
 
@@ -251,6 +256,7 @@ export default function Empresas() {
         .from('empresas')
         .select(`
           id, empkey, rut, razon_social, nombre_fantasia, completado, estado_empresa, asignado_a,
+          representantes(id),
           contactos(id),
           usuarios_activos(id),
           empresa_servicios(id)
@@ -267,6 +273,7 @@ export default function Empresas() {
           completado: e.completado,
           estado_empresa: e.estado_empresa,
           asignado_a: e.asignado_a,
+          _representantes: Array.isArray(e.representantes) ? e.representantes.length : 0,
           _contactos: Array.isArray(e.contactos) ? e.contactos.length : 0,
           _usuarios: Array.isArray(e.usuarios_activos) ? e.usuarios_activos.length : 0,
           _servicios: Array.isArray(e.empresa_servicios) ? e.empresa_servicios.length : 0,
@@ -397,10 +404,11 @@ export default function Empresas() {
     [resultados]
   );
   const conteosFiltro = useMemo(() => ({
-    sin_contactos: totalBorradoresSinFiltro.filter((e) => e._contactos === 0).length,
-    sin_usuarios:  totalBorradoresSinFiltro.filter((e) => e._usuarios === 0).length,
-    sin_servicios: totalBorradoresSinFiltro.filter((e) => e._servicios === 0).length,
-    listos:        totalBorradoresSinFiltro.filter((e) => e._contactos > 0 && e._usuarios > 0 && e._servicios > 0).length,
+    sin_representantes: totalBorradoresSinFiltro.filter((e) => e._representantes === 0).length,
+    sin_contactos:      totalBorradoresSinFiltro.filter((e) => e._contactos === 0).length,
+    sin_usuarios:       totalBorradoresSinFiltro.filter((e) => e._usuarios === 0).length,
+    sin_servicios:      totalBorradoresSinFiltro.filter((e) => e._servicios === 0).length,
+    listos:             totalBorradoresSinFiltro.filter((e) => e._representantes > 0 && e._contactos > 0 && e._usuarios > 0 && e._servicios > 0).length,
   }), [totalBorradoresSinFiltro]);
 
   return (

@@ -13,6 +13,8 @@ import ImportarContactosCsv from './pages/ImportarContactosCsv';
 import Dashboard from './pages/Dashboard';
 import MisEmpresas from './pages/MisEmpresas';
 import DefinirContrasena from './pages/DefinirContrasena';
+import HistorialEmpresa from './pages/HistorialEmpresa';
+import HistorialBorradores from './pages/HistorialBorradores';
 
 function App() {
   return (
@@ -25,6 +27,17 @@ function App() {
             <Route path="/" element={<Empresas />} />
             <Route path="/empresas/:empkey" element={<FichaEmpresa />} />
             <Route path="/mis-empresas" element={<MisEmpresas />} />
+
+            {/* Historial de empresa completada: admin y lider */}
+            <Route path="/empresas/:empkey/historial" element={
+              <ProtectedRouteGestores><HistorialEmpresa /></ProtectedRouteGestores>
+            } />
+
+            {/* Auditoría global de borradores: admin y lider */}
+            <Route path="/historial-borradores" element={
+              <ProtectedRouteGestores><HistorialBorradores /></ProtectedRouteGestores>
+            } />
+
             <Route path="/gestion-usuarios" element={
               <ProtectedRouteGestores><GestionUsuarios /></ProtectedRouteGestores>
             } />
@@ -37,15 +50,12 @@ function App() {
             <Route path="/importar-csv" element={
               <ProtectedRouteAdmin><ImportarCsv /></ProtectedRouteAdmin>
             } />
-            {/* Importar usuarios activos: admin y lider */}
             <Route path="/importar-usuarios-csv" element={
               <ProtectedRouteGestores><ImportarUsuariosCsv /></ProtectedRouteGestores>
             } />
-            {/* Importar contactos: admin y lider */}
             <Route path="/importar-contactos-csv" element={
               <ProtectedRouteGestores><ImportarContactosCsv /></ProtectedRouteGestores>
             } />
-            {/* Dashboard: admin y lider */}
             <Route path="/dashboard" element={
               <ProtectedRouteGestores><Dashboard /></ProtectedRouteGestores>
             } />

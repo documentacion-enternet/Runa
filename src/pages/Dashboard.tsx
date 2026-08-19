@@ -36,6 +36,7 @@ type BorradorConEtapas = {
   empkey: number;
   razon_social: string;
   asignado_a: string | null;
+  tiene_representantes: boolean;
   tiene_contactos: boolean;
   tiene_usuarios: boolean;
   tiene_servicios: boolean;
@@ -132,7 +133,7 @@ const COLOR_ROL: Record<string, { bg: string; color: string }> = {
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 
-type EtapaDetalle = 'sin_contactos' | 'sin_usuarios' | 'sin_servicios' | 'listos' | null;
+type EtapaDetalle = 'sin_representantes' | 'sin_contactos' | 'sin_usuarios' | 'sin_servicios' | 'listos' | null;
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -161,6 +162,7 @@ export default function Dashboard() {
         .from('empresas')
         .select(`
           id, empkey, razon_social, asignado_a,
+          representantes(id),
           contactos(id),
           usuarios_activos(id),
           empresa_servicios(id)
@@ -175,6 +177,7 @@ export default function Dashboard() {
           empkey: b.empkey,
           razon_social: b.razon_social,
           asignado_a: b.asignado_a,
+          tiene_representantes: Array.isArray(b.representantes) && b.representantes.length > 0,
           tiene_contactos: Array.isArray(b.contactos) && b.contactos.length > 0,
           tiene_usuarios: Array.isArray(b.usuarios_activos) && b.usuarios_activos.length > 0,
           tiene_servicios: Array.isArray(b.empresa_servicios) && b.empresa_servicios.length > 0,
@@ -209,7 +212,7 @@ export default function Dashboard() {
   // Datos básicos: siempre 100% (si existe en DB, tiene rut + razon_social NOT NULL)
   // Listos para completar = tienen las 4 etapas
   const listosParaCompletar = borradores.filter(
-    (b) => b.tiene_contactos && b.tiene_usuarios && b.tiene_servicios
+    (b) => b.tiene_representantes && b.tiene_contactos && b.tiene_usuarios && b.tiene_servicios
   ).length;
 
   // ─── Stats por perfil ─────────────────────────────────────────────────────
@@ -293,17 +296,19 @@ export default function Dashboard() {
           {totalBorradoresActuales > 0 && (() => {
             // Empresas de cada grupo para la tabla de detalle
             const grupoPorEtapa: Record<Exclude<EtapaDetalle, null>, BorradorConEtapas[]> = {
-              sin_contactos: borradores.filter((b) => !b.tiene_contactos),
-              sin_usuarios:  borradores.filter((b) => !b.tiene_usuarios),
-              sin_servicios: borradores.filter((b) => !b.tiene_servicios),
-              listos:        borradores.filter((b) => b.tiene_contactos && b.tiene_usuarios && b.tiene_servicios),
+              sin_representantes: borradores.filter((b) => !b.tiene_representantes),
+              sin_contactos:      borradores.filter((b) => !b.tiene_contactos),
+              sin_usuarios:       borradores.filter((b) => !b.tiene_usuarios),
+              sin_servicios:      borradores.filter((b) => !b.tiene_servicios),
+              listos:             borradores.filter((b) => b.tiene_representantes && b.tiene_contactos && b.tiene_usuarios && b.tiene_servicios),
             };
 
             const filasBarra = [
-              { key: 'sin_contactos' as EtapaDetalle, label: 'Sin contactos', valor: borradores.filter((b) => !b.tiene_contactos).length,  color: '#5E9C7C' },
-              { key: 'sin_usuarios'  as EtapaDetalle, label: 'Sin usuarios',  valor: borradores.filter((b) => !b.tiene_usuarios).length,   color: '#5B4E82' },
-              { key: 'sin_servicios' as EtapaDetalle, label: 'Sin servicios', valor: borradores.filter((b) => !b.tiene_servicios).length,  color: '#B79B85' },
-              { key: 'listos'        as EtapaDetalle, label: 'Listos ✓',      valor: listosParaCompletar,                                   color: '#7A6BB0' },
+              { key: 'sin_representantes' as EtapaDetalle, label: 'Sin representantes', valor: borradores.filter((b) => !b.tiene_representantes).length, color: '#9B8EC4' },
+              { key: 'sin_contactos'      as EtapaDetalle, label: 'Sin contactos',      valor: borradores.filter((b) => !b.tiene_contactos).length,      color: '#5E9C7C' },
+              { key: 'sin_usuarios'       as EtapaDetalle, label: 'Sin usuarios',       valor: borradores.filter((b) => !b.tiene_usuarios).length,       color: '#5B4E82' },
+              { key: 'sin_servicios'      as EtapaDetalle, label: 'Sin servicios',      valor: borradores.filter((b) => !b.tiene_servicios).length,      color: '#B79B85' },
+              { key: 'listos'             as EtapaDetalle, label: 'Listos ✓',           valor: listosParaCompletar,                                       color: '#7A6BB0' },
             ];
 
             return (
@@ -384,9 +389,9 @@ export default function Dashboard() {
                                   </TableHead>
                                   <TableBody>
                                     {empresasDetalle.map((b: BorradorConEtapas) => {
-                                      const etapasOk = [true, b.tiene_contactos, b.tiene_usuarios, b.tiene_servicios];
-                                      const etapaLabels = ['Datos', 'Contactos', 'Usuarios', 'Servicios'];
-                                      const etapaColors = ['#7A6BB0', '#5E9C7C', '#5B4E82', '#B79B85'];
+                                      const etapasOk = [true, b.tiene_representantes, b.tiene_contactos, b.tiene_usuarios, b.tiene_servicios];
+                                      const etapaLabels = ['Datos', 'Representantes', 'Contactos', 'Usuarios', 'Servicios'];
+                                      const etapaColors = ['#7A6BB0', '#9B8EC4', '#5E9C7C', '#5B4E82', '#B79B85'];
                                       return (
                                         <TableRow key={b.id} hover sx={{ cursor: 'pointer' }}
                                           onClick={() => navigate(`/formulario-inscripcion/${b.empkey}`)}>

@@ -213,10 +213,19 @@ export default function FormularioInscripcion() {
     const duplicado = existentes?.find((e) => e.id !== empresaId);
     if (duplicado) return 'Ya existe otra empresa con ese Empkey';
     if (empresaId) {
+      // Snapshot antes de actualizar
+      const { data: antes } = await supabase.from('empresas')
+        .select('empkey, rut, razon_social, nombre_fantasia').eq('id', empresaId).single();
       const { error } = await supabase.from('empresas').update({
         empkey: Number(empkey), rut: rut.trim(), razon_social: razonSocial.trim(),
         nombre_fantasia: nombreFantasia.trim() || null,
       }).eq('id', empresaId);
+      if (!error) {
+        await registrarHistorial('datos', 'modificó Datos de Empresa', antes, {
+          empkey: Number(empkey), rut: rut.trim(),
+          razon_social: razonSocial.trim(), nombre_fantasia: nombreFantasia.trim() || null,
+        });
+      }
       return error?.message ?? null;
     }
     const { data, error } = await supabase.from('empresas').insert({
@@ -234,8 +243,19 @@ export default function FormularioInscripcion() {
     const filas = representantes
       .filter((r) => r.rut.trim() && r.nombre_completo.trim())
       .map((r) => ({ empresa_id: empresaId, rut: r.rut.trim(), nombre_completo: r.nombre_completo.trim(), tipo: r.tipo, estado: r.estado }));
-    if (filas.length === 0) return null;
+    if (filas.length === 0) {
+      await registrarHistorial('representantes', 'eliminó todos los Representantes', null, []);
+      return null;
+    }
+    const { data: antesReps } = await supabase.from('representantes')
+      .select('rut, nombre_completo, tipo, estado').eq('empresa_id', empresaId);
     const { error } = await supabase.from('representantes').insert(filas);
+    if (!error) {
+      await registrarHistorial('representantes', 'modificó Representantes',
+        antesReps ?? [],
+        filas.map(({ empresa_id: _, ...r }) => r),
+      );
+    }
     return error?.message ?? null;
   }
 
@@ -252,20 +272,40 @@ export default function FormularioInscripcion() {
         correo: c.correo.trim() || null, telefono: c.telefono.trim() || null,
       })),
     ];
-    if (filas.length === 0) return null;
+    if (filas.length === 0) {
+      await registrarHistorial('contactos', 'eliminó todos los Contactos', null, []);
+      return null;
+    }
+    const { data: antesCont } = await supabase.from('contactos')
+      .select('tipo, nombre, apellido, correo, telefono').eq('empresa_id', empresaId);
     const { error } = await supabase.from('contactos').insert(filas);
+    if (!error) {
+      await registrarHistorial('contactos', 'modificó Contactos',
+        antesCont ?? [],
+        filas.map(({ empresa_id: _, ...c }) => c),
+      );
+    }
     return error?.message ?? null;
   }
 
   async function guardarPasoUsuarios(): Promise<string | null> {
     if (!empresaId) return 'Falta guardar los Datos de Empresa primero';
     await supabase.from('usuarios_activos').delete().eq('empresa_id', empresaId);
+    const { data: antesUsu } = await supabase.from('usuarios_activos')
+      .select('rut, nombre, estado').eq('empresa_id', empresaId);
     if (usuarios.length > 0) {
       const { error } = await supabase.from('usuarios_activos').insert(
         usuarios.map((u) => ({ empresa_id: empresaId, rut: u.rut.trim(), nombre: u.nombre.trim(), estado: u.estado }))
       );
+      if (!error) {
+        await registrarHistorial('usuarios', 'modificó Usuarios activos',
+          antesUsu ?? [],
+          usuarios.map(u => ({ rut: u.rut.trim(), nombre: u.nombre.trim(), estado: u.estado })),
+        );
+      }
       return error?.message ?? null;
     }
+    await registrarHistorial('usuarios', 'eliminó todos los Usuarios activos', antesUsu ?? [], []);
     return null;
   }
 
@@ -305,10 +345,34 @@ export default function FormularioInscripcion() {
       ...(esPrimeraVezCompletada ? { completado_por: session?.user.id, completado_en: new Date().toISOString() } : {}),
     }).eq('id', empresaId);
     if (errCompletar) return errCompletar.message;
+    // Registrar servicios en historial
+    await registrarHistorial('servicios', 'guardó Servicios contratados',
+      null,
+      serviciosSeleccionados,
+    );
+
     if (esPrimeraVezCompletada) {
       supabase.functions.invoke('notify-empresa-completada', { body: { razonSocial, empkey } }).catch(() => {});
     }
     return null;
+  }
+
+
+  // ── Registrar historial ───────────────────────────────────────────────────
+  async function registrarHistorial(
+    seccion: string,
+    descripcion: string,
+    antes: any,
+    despues: any,
+  ) {
+    if (!empresaId || !session?.user.id) return;
+    await supabase.from('empresa_historial').insert({
+      empresa_id: empresaId,
+      usuario_id: session.user.id,
+      seccion,
+      descripcion,
+      cambios: { antes, despues },
+    });
   }
 
   // ── Navegación ────────────────────────────────────────────────────────────
