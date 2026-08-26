@@ -42,7 +42,7 @@ const COLOR_TIPO: Record<Representante['tipo'], string> = {
 export default function FichaEmpresa() {
   const { empkey } = useParams();
   const navigate = useNavigate();
-  const { session, esAdmin, esLider, esVista, puedeGestionar } = useAuth();
+  const { esAdmin, esLider, esVista, puedeGestionar } = useAuth();
   const [cargando, setCargando] = useState(true);
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [contactos, setContactos] = useState<Contacto[]>([]);
@@ -130,7 +130,9 @@ export default function FichaEmpresa() {
 
   const tecnicos = contactos.filter((c) => c.tipo === 'tecnico');
   const facturacion = contactos.filter((c) => c.tipo === 'facturacion');
-  const puedeEditar = esAdmin || esLider || (empresa.creado_por === session?.user.id || empresa.asignado_a === session?.user.id);
+  // Cualquier agente, lider o admin puede editar borradores
+  // Solo vista no puede editar nada
+  const puedeEditar = !esVista;
   const tieneAcciones = esAdmin || esLider;
   const puedeCaducarReactivar = esAdmin || esLider;
   const detallesPorCodigo = Object.fromEntries(servicios.map((s) => [s.servicio.codigo, s.detalles]));
