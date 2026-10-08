@@ -99,6 +99,7 @@ export default function GestionUsuarios() {
 
     const { data, error: errorFuncion } = await supabase.functions.invoke('invite-user', {
       body: { email: correo.trim(), rol, nombre_completo: nombreCompleto.trim() || undefined },
+      headers: { Authorization: `Bearer ${session?.access_token}` },
     });
 
     setEnviando(false);
@@ -154,6 +155,7 @@ export default function GestionUsuarios() {
 
     const { data, error: errorFuncion } = await supabase.functions.invoke('delete-user', {
       body: { userId: usuarioAEliminar.id },
+      headers: { Authorization: `Bearer ${session?.access_token}` },
     });
 
     setEliminando(false);
@@ -199,7 +201,6 @@ export default function GestionUsuarios() {
                 sx={{
                   display: 'flex', alignItems: 'center', gap: 1.5, px: 2.5, py: 1.8,
                   borderBottom: i < usuarios.length - 1 ? '1px solid #EAE5F5' : 'none',
-                  // Filas de admin/lider que el lider no puede tocar: aspecto levemente atenuado
                   opacity: esLider && !puedeTocar ? 0.6 : 1,
                 }}
               >
