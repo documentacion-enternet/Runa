@@ -236,7 +236,7 @@ export default function Empresas() {
   const [procesandoEliminacionPermanente, setProcesandoEliminacionPermanente] = useState(false);
 
   const navigate = useNavigate();
-  const { session, esAdmin, esLider } = useAuth();
+  const { session, esAdmin, esLider, esVista } = useAuth();
   const userId = session?.user.id;
 
   const puedeAsignar = esAdmin || esLider;
@@ -245,7 +245,7 @@ export default function Empresas() {
 
   const SECCIONES: { key: 'activa' | 'borrador' | 'caducada' | 'eliminada'; titulo: string; color: string }[] = [
     { key: 'activa',   titulo: 'Activas',   color: '#5E9C7C' },
-    { key: 'borrador', titulo: 'Borradores', color: '#C9A15A' },
+    ...(!esVista ? [{ key: 'borrador' as const, titulo: 'Borradores', color: '#C9A15A' }] : []),
     { key: 'caducada', titulo: 'Caducadas', color: '#B7791F' },
     ...(puedeVerEliminadas ? [{ key: 'eliminada' as const, titulo: 'Eliminadas', color: '#A85F6A' }] : []),
   ];
@@ -435,30 +435,32 @@ export default function Empresas() {
             },
           }}
         />
-        <Tooltip title={soloMias ? 'Ver todas las empresas' : 'Ver solo mis borradores asignados'}>
-          <ToggleButton
-            value="soloMias" selected={soloMias}
-            onChange={() => { setSoloMias((v) => !v); limpiarSeleccion(); setFiltroEtapa(null); }}
-            size="small"
-            sx={{
-              gap: 0.8, px: 1.5, fontSize: 12.5, fontWeight: 600, textTransform: 'none',
-              borderColor: soloMias ? 'primary.main' : 'divider',
-              color: soloMias ? 'primary.main' : 'text.secondary',
-              bgcolor: soloMias ? 'rgba(122,107,176,0.08)' : 'background.paper',
-              '&.Mui-selected': { bgcolor: 'rgba(122,107,176,0.08)', color: 'primary.main' },
-              '&.Mui-selected:hover': { bgcolor: 'rgba(122,107,176,0.12)' },
-            }}
-          >
-            <PersonOutlinedIcon sx={{ fontSize: 17 }} />
-            Mis empresas
-            {misEmpresas.length > 0 && (
-              <Chip label={misEmpresas.length} size="small"
-                sx={{ height: 18, fontSize: 10.5, fontWeight: 700, ml: 0.5,
-                  bgcolor: soloMias ? 'primary.main' : 'rgba(122,107,176,0.15)',
-                  color: soloMias ? '#fff' : 'primary.main' }} />
-            )}
-          </ToggleButton>
-        </Tooltip>
+        {!esVista && (
+          <Tooltip title={soloMias ? 'Ver todas las empresas' : 'Ver solo mis borradores asignados'}>
+            <ToggleButton
+              value="soloMias" selected={soloMias}
+              onChange={() => { setSoloMias((v) => !v); limpiarSeleccion(); setFiltroEtapa(null); }}
+              size="small"
+              sx={{
+                gap: 0.8, px: 1.5, fontSize: 12.5, fontWeight: 600, textTransform: 'none',
+                borderColor: soloMias ? 'primary.main' : 'divider',
+                color: soloMias ? 'primary.main' : 'text.secondary',
+                bgcolor: soloMias ? 'rgba(122,107,176,0.08)' : 'background.paper',
+                '&.Mui-selected': { bgcolor: 'rgba(122,107,176,0.08)', color: 'primary.main' },
+                '&.Mui-selected:hover': { bgcolor: 'rgba(122,107,176,0.12)' },
+              }}
+            >
+              <PersonOutlinedIcon sx={{ fontSize: 17 }} />
+              Mis empresas
+              {misEmpresas.length > 0 && (
+                <Chip label={misEmpresas.length} size="small"
+                  sx={{ height: 18, fontSize: 10.5, fontWeight: 700, ml: 0.5,
+                    bgcolor: soloMias ? 'primary.main' : 'rgba(122,107,176,0.15)',
+                    color: soloMias ? '#fff' : 'primary.main' }} />
+              )}
+            </ToggleButton>
+          </Tooltip>
+        )}
       </Box>
 
       {/* Barra de asignación masiva */}

@@ -65,20 +65,22 @@ export default function HistorialBorradores() {
       if (error) { console.error('Error historial:', error); setCargando(false); return; }
       if (!historialData || historialData.length === 0) { setCargando(false); return; }
 
-      // IDs únicos de empresas que aparecen en el historial (pocos — solo las que tienen cambios)
+      // IDs únicos de empresas que aparecen en el historial
       const empresaIds = [...new Set(historialData.map((h: any) => h.empresa_id))];
 
-      // Traer esas empresas y quedarse solo con las que son borradores activos
-      const { data: empresasData } = await supabase
-        .from('empresas')
-        .select('id, empkey, razon_social, completado, estado_empresa')
-        .in('id', empresaIds);
-
-      const mapaBorradores = new Map(
-        (empresasData ?? [])
+      // Traer esas empresas en lotes de 100 para evitar URL demasiado larga (error 400)
+      const mapaBorradores = new Map<string, { empkey: number; razon_social: string }>();
+      const LOTE = 100;
+      for (let i = 0; i < empresaIds.length; i += LOTE) {
+        const lote = empresaIds.slice(i, i + LOTE);
+        const { data: loteData } = await supabase
+          .from('empresas')
+          .select('id, empkey, razon_social, completado, estado_empresa')
+          .in('id', lote);
+        (loteData ?? [])
           .filter((e: any) => e.completado === false && e.estado_empresa !== 'eliminada')
-          .map((e: any) => [e.id, { empkey: e.empkey, razon_social: e.razon_social }])
-      );
+          .forEach((e: any) => mapaBorradores.set(e.id, { empkey: e.empkey, razon_social: e.razon_social }));
+      }
 
       // Resolver perfiles de usuario
       const usuarioIds = [...new Set(historialData.map((h: any) => h.usuario_id).filter(Boolean))];
