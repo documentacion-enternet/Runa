@@ -3,7 +3,7 @@
 // Invita a un nuevo usuario del equipo SAC por correo, con diseño propio de Runa.
 // Envía el correo vía SMTP de Gmail/Google Workspace, usando un alias (runa@enternet.cl)
 // configurado como "Enviar correo como" en una cuenta real del dominio.
-// Solo puede ser llamada por un admin (se verifica adentro).
+// Pueden invitar: admin y lider. Admin puede asignar cualquier rol; lider solo puede asignar agente y vista.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { SMTPClient } from 'https://deno.land/x/denomailer/mod.ts';
@@ -94,6 +94,13 @@ function plantillaInvitacion({ nombre, rolTexto, link }: { nombre: string; rolTe
 `;
 }
 
+const ROL_LABEL: Record<string, string> = {
+  admin:  'Administrador',
+  lider:  'Líder de Equipo',
+  agente: 'Agente SAC',
+  vista:  'Vista',
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -128,8 +135,11 @@ Deno.serve(async (req) => {
       .eq('id', user.id)
       .single();
 
-    if (perfil?.rol !== 'admin') {
-      return new Response(JSON.stringify({ error: 'Solo un administrador puede invitar usuarios' }), {
+    const rolInvitador = perfil?.rol;
+
+    // Solo admin y lider pueden invitar
+    if (rolInvitador !== 'admin' && rolInvitador !== 'lider') {
+      return new Response(JSON.stringify({ error: 'Solo un administrador o líder puede invitar usuarios' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -141,6 +151,19 @@ Deno.serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Roles válidos por nivel de invitador:
+    // - admin puede asignar cualquier rol
+    // - lider solo puede asignar agente y vista
+    const rolesPermitidosParaLider = ['agente', 'vista'];
+    const rolesValidos = ['admin', 'lider', 'agente', 'vista'];
+
+    let rolFinal = rolesValidos.includes(rol) ? rol : 'agente';
+
+    if (rolInvitador === 'lider' && !rolesPermitidosParaLider.includes(rolFinal)) {
+      // Un lider intentó asignar admin o lider → forzar a agente
+      rolFinal = 'agente';
     }
 
     const supabaseAdmin = createClient(
@@ -162,8 +185,6 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    const rolFinal = rol === 'admin' ? 'admin' : 'agente';
 
     if (linkData.user) {
       await supabaseAdmin
@@ -193,7 +214,7 @@ Deno.serve(async (req) => {
         subject: 'Te invitaron a Runa — Panel SAC',
         html: minificarHtml(plantillaInvitacion({
           nombre: nombre_completo || '',
-          rolTexto: rolFinal === 'admin' ? 'Administrador' : 'Agente SAC',
+          rolTexto: ROL_LABEL[rolFinal] ?? rolFinal,
           link: linkData.properties.action_link,
         })),
       });
