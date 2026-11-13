@@ -14,6 +14,8 @@ import ContactsOutlinedIcon from '@mui/icons-material/ContactsOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
+import InboxOutlinedIcon from '@mui/icons-material/InboxOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { LockOutlined as LockOutlinedIcon } from '@mui/icons-material';
@@ -104,9 +106,14 @@ export function Sidebar() {
     ...(puedeGestionar ? [
       { label: 'Dashboard', path: '/dashboard', icon: <DashboardOutlinedIcon fontSize="small" /> },
     ] : []),
-    // Auditoría de borradores: solo admin y lider
     ...(puedeGestionar ? [
       { label: 'Auditoría borradores', path: '/historial-borradores', icon: <HistoryOutlinedIcon fontSize="small" /> },
+    ] : []),
+    // Solicitudes: todos los roles
+    { label: 'Solicitudes y Mejoras', path: '/solicitudes', icon: <HelpOutlineOutlinedIcon fontSize="small" /> },
+    // Gestión de solicitudes: solo admin y lider
+    ...(puedeGestionar ? [
+      { label: 'Gestión de Solicitudes', path: '/gestion-solicitudes', icon: <InboxOutlinedIcon fontSize="small" /> },
     ] : []),
   ];
 

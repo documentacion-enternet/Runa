@@ -76,12 +76,22 @@ export type DetalleEF = {
   documentos: DocumentoSeleccionado[];
   modoFirma: 'Controlada';
   integracion: IntegracionConfig;
+  // ── Nuevos campos ──────────────────────────────────────────────
+  tieneSucursales?: boolean;
+  sucursales?: string[];
+  tipoFolios?: 'reserva' | 'centraliza' | '';
+  terminalId?: string;
 };
 
 export type DetalleEFP = {
   documentos: DocumentoSeleccionado[];
   modoFirma: 'Controlada';
   integracion: IntegracionConfig;
+  // ── Nuevos campos ──────────────────────────────────────────────
+  tieneSucursales?: boolean;
+  sucursales?: string[];
+  tipoFolios?: 'reserva' | 'centraliza' | '';
+  terminalId?: string;
 };
 
 export type Sucursal = {

@@ -1,4 +1,6 @@
-import { Box, Typography, RadioGroup, FormControlLabel, Radio, Checkbox, Divider, Chip } from '@mui/material';
+import { Box, Typography, RadioGroup, FormControlLabel, Radio, Checkbox, Divider, Chip, Switch, TextField, IconButton, Button, FormControl, FormLabel } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import { DeleteOutlined as DeleteOutlineIcon } from '@mui/icons-material';
 import type { DetalleEFP, DocumentoSeleccionado, DetallesServicios, Canal } from '../servicios-types';
 import { DOCUMENTOS_NACIONALES, DOCUMENTOS_EXPORTACION } from '../servicios-types';
 import { IntegracionSection, valorInicialIntegracion } from './IntegracionSection';
@@ -14,6 +16,10 @@ const valorInicial = (): DetalleEFP => ({
   documentos: [],
   modoFirma: 'Controlada',
   integracion: valorInicialIntegracion(),
+  tieneSucursales: false,
+  sucursales: [],
+  tipoFolios: '',
+  terminalId: '',
 });
 
 type Props = {
@@ -24,12 +30,17 @@ type Props = {
 };
 
 export function FormEFP({ value, onChange, seleccionados }: Props) {
-  const v = {
+  const v: DetalleEFP = {
     ...valorInicial(),
     ...value,
-    integracion: { ...valorInicial().integracion, ...(value?.integracion ?? {}) },
+    integracion: { ...valorInicialIntegracion(), ...(value?.integracion ?? {}) },
   };
   const tieneBO = seleccionados.includes('BO');
+
+  const sucursales = v.sucursales ?? [];
+  const tieneSucursales = v.tieneSucursales ?? false;
+  const tipoFolios = v.tipoFolios ?? '';
+  const terminalId = v.terminalId ?? '';
 
   function actualizar(cambios: Partial<DetalleEFP>) {
     onChange({ ...v, ...cambios });
@@ -67,6 +78,29 @@ export function FormEFP({ value, onChange, seleccionados }: Props) {
     actualizarDocumento(codigo, {
       canales: tiene ? doc.canales.filter((c) => c !== canal) : [...doc.canales, canal],
     });
+  }
+
+  // ── Sucursales ──────────────────────────────────────────────────────────────
+  function toggleSucursales(val: boolean) {
+    actualizar({
+      tieneSucursales: val,
+      sucursales: val && sucursales.length === 0 ? [''] : sucursales,
+    });
+  }
+
+  function agregarSucursal() {
+    actualizar({ sucursales: [...sucursales, ''] });
+  }
+
+  function actualizarSucursal(i: number, valor: string) {
+    const nueva = [...sucursales];
+    nueva[i] = valor;
+    actualizar({ sucursales: nueva });
+  }
+
+  function eliminarSucursal(i: number) {
+    const nueva = sucursales.filter((_, j) => j !== i);
+    actualizar({ sucursales: nueva.length === 0 ? [''] : nueva });
   }
 
   const tieneEmisionNativa = v.documentos.some((d) => d.canales.includes('nativo'));
@@ -196,6 +230,95 @@ export function FormEFP({ value, onChange, seleccionados }: Props) {
 
       {/* Integración */}
       <IntegracionSection value={v.integracion} onChange={(integracion) => actualizar({ integracion })} />
+
+      {/* ── Sucursales ──────────────────────────────────────────── */}
+      <Divider sx={{ my: 3 }} />
+
+      <Box sx={{ mb: 1 }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={tieneSucursales}
+              onChange={(e) => toggleSucursales(e.target.checked)}
+              size="small"
+            />
+          }
+          label={<Typography sx={{ fontSize: 13.5, fontWeight: 600 }}>¿Tiene sucursales?</Typography>}
+        />
+      </Box>
+
+      {tieneSucursales && (
+        <Box sx={{ pl: 1, mb: 2 }}>
+          <Typography sx={{ fontSize: 12, color: 'text.disabled', mb: 1.5 }}>
+            Agrega el nombre de cada sucursal habilitada para EFP.
+          </Typography>
+          {sucursales.map((nombre, i) => (
+            <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
+              <TextField
+                label={`Sucursal ${i + 1}`}
+                value={nombre}
+                onChange={(e) => actualizarSucursal(i, e.target.value)}
+                size="small"
+                sx={{ flexGrow: 1 }}
+              />
+              <IconButton
+                onClick={() => eliminarSucursal(i)}
+                size="small"
+                disabled={sucursales.length === 1 && i === 0}
+              >
+                <DeleteOutlineIcon
+                  fontSize="small"
+                  sx={{ color: sucursales.length === 1 && i === 0 ? 'text.disabled' : 'error.main' }}
+                />
+              </IconButton>
+            </Box>
+          ))}
+          <Button startIcon={<AddIcon />} onClick={agregarSucursal} size="small" sx={{ mt: 0.5 }}>
+            Agregar sucursal
+          </Button>
+        </Box>
+      )}
+
+      {/* ── Folios ──────────────────────────────────────────────── */}
+      <Box sx={{ mt: tieneSucursales ? 1 : 2 }}>
+        <FormControl>
+          <FormLabel
+            sx={{
+              fontSize: 13.5, fontWeight: 600, color: 'text.primary', mb: 1,
+              '&.Mui-focused': { color: 'text.primary' },
+            }}
+          >
+            ¿Reserva Folios o Centraliza Folios?
+          </FormLabel>
+          <RadioGroup
+            row
+            value={tipoFolios}
+            onChange={(e) => actualizar({ tipoFolios: e.target.value as 'reserva' | 'centraliza' | '' })}
+          >
+            <FormControlLabel
+              value="reserva"
+              control={<Radio size="small" />}
+              label={<Typography sx={{ fontSize: 13.5 }}>Reserva Folios</Typography>}
+            />
+            <FormControlLabel
+              value="centraliza"
+              control={<Radio size="small" />}
+              label={<Typography sx={{ fontSize: 13.5 }}>Centraliza Folios</Typography>}
+            />
+          </RadioGroup>
+        </FormControl>
+
+        {tipoFolios && (
+          <TextField
+            label="Terminal ID"
+            value={terminalId}
+            onChange={(e) => actualizar({ terminalId: e.target.value })}
+            size="small"
+            sx={{ mt: 1.5, maxWidth: 320, display: 'block' }}
+            helperText="Identificador del terminal asociado a los folios"
+          />
+        )}
+      </Box>
     </Box>
   );
 }

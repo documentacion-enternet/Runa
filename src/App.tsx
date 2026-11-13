@@ -15,6 +15,8 @@ import MisEmpresas from './pages/MisEmpresas';
 import DefinirContrasena from './pages/DefinirContrasena';
 import HistorialEmpresa from './pages/HistorialEmpresa';
 import HistorialBorradores from './pages/HistorialBorradores';
+import Solicitudes from './pages/Solicitudes';
+import GestionSolicitudes from './pages/GestionSolicitudes';
 
 function App() {
   return (
@@ -58,6 +60,14 @@ function App() {
             } />
             <Route path="/dashboard" element={
               <ProtectedRouteGestores><Dashboard /></ProtectedRouteGestores>
+            } />
+
+            {/* Solicitudes y mejoras: todos los roles */}
+            <Route path="/solicitudes" element={<Solicitudes />} />
+
+            {/* Gestión de solicitudes: solo admin y lider */}
+            <Route path="/gestion-solicitudes" element={
+              <ProtectedRouteGestores><GestionSolicitudes /></ProtectedRouteGestores>
             } />
           </Route>
         </Routes>
